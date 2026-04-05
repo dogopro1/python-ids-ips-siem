@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDS/IPS Security Console</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e17;--surface:#111827;--surface2:#1a2235;--border:#1f2937;
+  --text:#e5e7eb;--muted:#6b7280;--muted2:#4b5563;
+  --green:#10b981;--red:#ef4444;--orange:#f97316;--yellow:#eab308;
+  --blue:#3b82f6;--purple:#8b5cf6;--cyan:#06b6d4;
+  --sidebar-w:220px;
+}
+body.theme-light{
+  --bg:#f3f4f6;--surface:#ffffff;--surface2:#f9fafb;--border:#e5e7eb;
+  --text:#111827;--muted:#6b7280;--muted2:#9ca3af;
+}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:16px;display:flex;height:100vh;overflow:hidden}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width .22s ease}
+.sidebar.collapsed{width:54px}
+.sidebar.collapsed .logo-text{display:none}
+.sidebar.collapsed .nav-item span:not(.nav-icon),.sidebar.collapsed .nav-section,.sidebar.collapsed .sidebar-footer{display:none}
+.sidebar.collapsed .logo{justify-content:center;padding:10px 0}
+.sidebar.collapsed .nav-item{justify-content:center;padding:10px 0;gap:0}
+.logo{padding:14px 16px;font-size:17px;font-weight:bold;color:var(--green);letter-spacing:.03em;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;min-height:58px}
+.logo-text{white-space:nowrap;overflow:hidden}
+.logo-text span{color:var(--muted);font-size:13px;display:block;font-weight:normal;margin-top:1px}
+.sidebar-toggle{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:4px 6px;line-height:1;flex-shrink:0;border-radius:4px;transition:background .15s,color .15s}
+.sidebar-toggle:hover{color:var(--text);background:rgba(255,255,255,.07)}
+.nav-section{padding:10px 14px 4px;font-size:12px;color:var(--muted2);text-transform:uppercase;letter-spacing:.1em}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:15px;transition:background .15s,color .15s;white-space:nowrap;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.nav-item.active{background:rgba(59,130,246,.12);color:var(--blue);border-left-color:var(--blue)}
+.nav-icon{font-size:17px;width:22px;text-align:center;flex-shrink:0}
+.sidebar-footer{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);font-size:14px;color:var(--muted);flex-shrink:0}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:5px}
+.status-dot.pulse{animation:pulse 2s infinite}
+.status-dot.error{background:var(--red);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Main area ───────────────────────────────────────────────────── */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:11px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.page-title{font-size:17px;font-weight:bold;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:14px;font-size:14px;color:var(--muted)}
+#conn-err{color:var(--red);display:none}
+#uptime-display{color:var(--green);font-variant-numeric:tabular-nums}
+.banner{padding:6px 20px;font-size:14px;display:none;background:#7c2d12;border-bottom:1px solid #dc2626;color:#fca5a5}
+
+.content{flex:1;overflow-y:auto;padding:20px 22px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ── Grid / Cards ────────────────────────────────────────────────── */
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:18px}
+.grid-2-1{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:18px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.card-title{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:9px;display:flex;align-items:center;justify-content:space-between}
+.card-value{font-size:30px;font-weight:bold;color:var(--text);font-variant-numeric:tabular-nums}
+.card-sub{font-size:14px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.section-title{font-size:15px;font-weight:bold;color:var(--text);margin:18px 0 9px;text-transform:uppercase;letter-spacing:.05em}
+/* Clickable stat cards */
+.stat-card{cursor:pointer;transition:border-color .15s,background .15s}
+.stat-card:hover{border-color:var(--blue);background:var(--surface2)}
+.stat-card .card-title::after{content:'→';font-size:14px;color:var(--muted2);opacity:0;transition:opacity .15s}
+.stat-card:hover .card-title::after{opacity:1}
+
+/* ── Tables ──────────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 11px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
+td{padding:8px 11px;border-bottom:1px solid var(--border);font-size:15px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+.empty{color:var(--muted);font-style:italic;padding:16px 11px;text-align:center;font-size:15px}
+
+/* ── Tags / Badges ───────────────────────────────────────────────── */
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:bold;letter-spacing:.04em}
+.tag-tcp{background:#1e3a5f;color:#93c5fd}
+.tag-udp{background:#1e3a1e;color:#86efac}
+.tag-icmp{background:#3b1f5e;color:#c4b5fd}
+.tag-other{background:#1f2937;color:#9ca3af}
+.sev-tag-high{background:#450a0a;color:#fca5a5;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold}
+.sev-tag-medium{background:#431407;color:#fdba74;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold}
+.sev-tag-low{background:#422006;color:#fde68a;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:bold}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:bold}
+.badge-green{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-yellow{background:rgba(234,179,8,.15);color:var(--yellow)}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+
+/* ── Forms / Inputs ──────────────────────────────────────────────── */
+.form-row{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+input[type=text],input[type=number],select,textarea{
+  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:8px 11px;font-family:inherit;font-size:14px;outline:none;
+}
+input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{border-color:var(--blue)}
+textarea{resize:vertical;width:100%;min-height:120px}
+.btn{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-green{background:var(--green);color:#000}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-sm{padding:5px 11px;font-size:13px}
+
+/* ── Output / Pre blocks ─────────────────────────────────────────── */
+.output-box{background:#050810;border:1px solid var(--border);border-radius:6px;padding:14px;font-size:14px;white-space:pre-wrap;word-break:break-all;max-height:440px;overflow-y:auto;color:#a5f3fc;line-height:1.65}
+.output-box.error{color:#fca5a5}
+
+/* ── Sparkline ───────────────────────────────────────────────────── */
+#sparkline-canvas{width:100%;height:70px}
+
+/* ── Traffic bars ────────────────────────────────────────────────── */
+.tbar-row{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:13px}
+.tbar-label{width:55px;color:var(--muted);flex-shrink:0}
+.tbar-track{flex:1;height:13px;background:var(--surface2);border-radius:6px;overflow:hidden}
+.tbar-fill{height:100%;border-radius:6px;transition:width .5s ease}
+.tbar-val{width:72px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums;flex-shrink:0}
+
+/* ── Misc ────────────────────────────────────────────────────────── */
+.text-red{color:var(--red)}
+.text-green{color:var(--green)}
+.text-orange{color:var(--orange)}
+.text-yellow{color:var(--yellow)}
+.text-blue{color:var(--blue)}
+.text-muted{color:var(--muted)}
+.ip-link{color:var(--blue);cursor:pointer;text-decoration:none}
+.ip-link:hover{text-decoration:underline}
+.mb8{margin-bottom:8px}
+.mt8{margin-top:8px}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Responsive scaling ──────────────────────────────────────────── */
+@media(max-width:1200px){
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:900px){
+  .sidebar{width:52px}
+  .sidebar.collapsed .logo-text,.nav-item span:not(.nav-icon),.nav-section,.sidebar-footer{display:none}
+  .logo{padding:14px;justify-content:center}
+  .nav-item{justify-content:center;padding:10px 0;gap:0}
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+  .grid-2-1{grid-template-columns:1fr}
+  .content{padding:12px 10px}
+}
+@media(max-width:600px){
+  .grid-4,.grid-3,.grid-2,.grid-2-1{grid-template-columns:1fr}
+  .card-value{font-size:22px}
+  .topbar-right>span{display:none}
+}
+/* ── Light theme overrides ───────────────────────────────────────── */
+body.theme-light .output-box{background:#f0f4f8;color:#1e3a5f;border-color:#cbd5e1}
+body.theme-light .output-box.error{color:#dc2626}
+body.theme-light .tag-tcp{background:#dbeafe;color:#1d4ed8}
+body.theme-light .tag-udp{background:#dcfce7;color:#15803d}
+body.theme-light .tag-icmp{background:#ede9fe;color:#6d28d9}
+body.theme-light .tag-other{background:#f3f4f6;color:#4b5563}
+body.theme-light .sev-tag-high{background:#fee2e2;color:#dc2626}
+body.theme-light .sev-tag-medium{background:#ffedd5;color:#c2410c}
+body.theme-light .sev-tag-low{background:#fef9c3;color:#a16207}
+body.theme-light .badge-green{background:rgba(16,185,129,.12);color:#065f46}
+body.theme-light .badge-red{background:rgba(220,38,38,.12);color:#b91c1c}
+body.theme-light .nav-item:hover{background:rgba(0,0,0,.05)}
+body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-text">&#x1F6E1; IDS/IPS
+      <span>Security Console</span>
+    </div>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" title="Collapse sidebar">&#x2630;</button>
+  </div>
+
+  <div class="nav-section">Monitor</div>
+  <div class="nav-item active" data-tab="overview">
+    <span class="nav-icon">&#x1F4CA;</span><span>Overview</span>
+  </div>
+  <div class="nav-item" data-tab="packets">
+    <span class="nav-icon">&#x1F4E6;</span><span>Packets</span>
+  </div>
+  <div class="nav-item" data-tab="alerts">
+    <span class="nav-icon">&#x26A0;</span><span>Alerts</span>
+  </div>
+  <div class="nav-item" data-tab="connections">
+    <span class="nav-icon">&#x1F517;</span><span>Connections</span>
+  </div>
+
+  <div class="nav-section">Analysis</div>
+  <div class="nav-item" data-tab="ip_analysis">
+    <span class="nav-icon">&#x1F50D;</span><span>IP Analysis</span>
+  </div>
+  <div class="nav-item" data-tab="domain_scan">
+    <span class="nav-icon">&#x1F310;</span><span>Domain Scan</span>
+  </div>
+  <div class="nav-item" data-tab="statistics">
+    <span class="nav-icon">&#x1F4C8;</span><span>Statistics</span>
+  </div>
+
+  <div class="nav-section">Management</div>
+  <div class="nav-item" data-tab="firewall">
+    <span class="nav-icon">&#x1F525;</span><span>Firewall</span>
+  </div>
+  <div class="nav-item" data-tab="tools">
+    <span class="nav-icon">&#x1F6E0;</span><span>Net Tools</span>
+  </div>
+  <div class="nav-item" data-tab="logs">
+    <span class="nav-icon">&#x1F4DC;</span><span>Logs</span>
+  </div>
+
+  <div class="sidebar-footer">
+    <div><span class="status-dot pulse" id="sbar-dot"></span><span id="sbar-status">LIVE</span></div>
+    <div style="margin-top:4px" id="sbar-uptime">--:--:--</div>
+  </div>
+</aside>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<div class="main-area">
+  <div class="topbar">
+    <div class="page-title" id="page-title">Overview</div>
+    <div class="topbar-right">
+      <span id="conn-err">&#x26A0; Server connection lost</span>
+      <span>Uptime: <span id="uptime-display">--:--:--</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">&#x263D; Dark</button>
+    </div>
+  </div>
+  <div class="banner" id="degraded-banner">
+    &#x26A0;&nbsp; No packet capture — run as Administrator (Windows) or sudo (Linux/macOS)
+  </div>
+
+  <div class="content">
+
+    <!-- ── TAB: Overview ──────────────────────────────────────────── -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="grid-4">
+        <div class="card stat-card" onclick="switchTab('packets')" title="Open Packets tab">
+          <div class="card-title">Total Packets</div>
+          <div class="card-value" id="ov-packets">0</div>
+          <div class="card-sub" id="ov-pps">-- pkt/s</div>
+        </div>
+        <div class="card stat-card" onclick="switchTab('alerts')" title="Open Alerts tab">
+          <div class="card-title">Alerts</div>
+          <div class="card-value text-red" id="ov-alerts">0</div>
+          <div class="card-sub" id="ov-alerts-sub">security threats detected</div>
+        </div>
+        <div class="card stat-card" onclick="switchTab('firewall')" title="Open Firewall tab">
+          <div class="card-title">Blocked IPs</div>
+          <div class="card-value text-orange" id="ov-blocked">0</div>
+          <div class="card-sub" id="ov-blocked-sub">by IPS engine</div>
+        </div>
+        <div class="card stat-card" onclick="switchTab('connections')" title="Open Connections tab">
+          <div class="card-title">Active Connections</div>
+          <div class="card-value text-blue" id="ov-conns">0</div>
+          <div class="card-sub" id="ov-proto">TCP 0 / UDP 0 / ICMP 0</div>
+        </div>
+      </div>
+
+      <!-- System Health Strip -->
+      <div class="card mb8" style="padding:10px 14px">
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;font-size:12px">
+          <span><span class="text-muted">IDS</span> <span id="h-ids">—</span></span>
+          <span><span class="text-muted">IPS</span> <span id="h-ips">—</span></span>
+          <span><span class="text-muted">Sniffer</span> <span id="h-sniff">—</span></span>
+          <span style="width:1px;height:16px;background:var(--border);display:inline-block"></span>
+          <span><span class="text-muted">24h Packets</span> <span id="h-pkt24" class="text-blue">—</span></span>
+          <span><span class="text-muted">24h Alerts</span> <span id="h-alt24" class="text-orange">—</span></span>
+          <span><span class="text-muted">DB Total</span> <span id="h-dbtotal" class="text-muted">—</span></span>
+          <span style="margin-left:auto;color:var(--muted);font-size:11px" id="h-ts"></span>
+        </div>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="card">
+          <div class="card-title">Traffic Rate (last 60s)</div>
+          <canvas id="sparkline-canvas"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Protocol Distribution</div>
+          <canvas id="proto-chart" style="max-height:160px"></canvas>
+          <div id="proto-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:8px;font-size:11px"></div>
+        </div>
+      </div>
+
+      <!-- Traffic bars (down-detector style) -->
+      <div class="card mb8" id="ov-traffic-bars">
+        <div class="card-title">Protocol Traffic Levels</div>
+        <div id="traffic-bars-body" style="padding:4px 0"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Recent Alerts</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Time</th><th>Type</th><th>Source IP</th><th>Severity</th></tr></thead>
+              <tbody id="ov-alerts-body">
+                <tr><td colspan="4" class="empty">No alerts</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Top Talkers</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>IP</th><th>Packets</th><th>Connections</th></tr></thead>
+              <tbody id="ov-talkers-body">
+                <tr><td colspan="3" class="empty">No data</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Packets ───────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-packets">
+      <div class="form-row mb8">
+        <select id="pkt-proto-filter">
+          <option value="">All protocols</option>
+          <option>TCP</option><option>UDP</option><option>ICMP</option><option>OTHER</option>
+        </select>
+        <input type="text" id="pkt-ip-filter" placeholder="Filter by IP..." style="width:160px">
+        <input type="text" id="pkt-dstport-filter" placeholder="Dst port..." style="width:90px">
+        <button class="btn btn-blue" onclick="loadPackets()">Refresh</button>
+        <button class="btn btn-ghost" onclick="togglePacketLive()"><span id="live-btn-text">Pause Live</span></button>
+        <a href="/api/export/packets.csv" class="btn btn-ghost" style="text-decoration:none" title="Export all packets as CSV">&#x2193; CSV</a>
+      </div>
+      <div class="card">
+        <div class="card-title">Captured Packets <span id="pkt-count" class="text-muted"></span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Time</th><th>Source</th><th>Destination</th>
+              <th>Port</th><th>Protocol</th><th>Flags</th><th>Size</th><th>Service</th>
+            </tr></thead>
+            <tbody id="packets-body">
+              <tr><td colspan="8" class="empty">Waiting for packets…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Alerts ────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-alerts">
+      <div class="form-row mb8">
+        <select id="alert-sev-filter">
+          <option value="">All severities</option>
+          <option>HIGH</option><option>MEDIUM</option><option>LOW</option>
+        </select>
+        <input type="text" id="alert-search" placeholder="Search alerts..." style="width:200px">
+        <button class="btn btn-blue" onclick="loadAlerts()">Search</button>
+        <a href="/api/export/alerts.csv" class="btn btn-ghost" style="text-decoration:none">Export CSV</a>
+      </div>
+      <div class="card">
+        <div class="card-title">Security Alerts <span id="alert-count" class="text-muted"></span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Time</th><th>Type</th><th>Source IP</th><th>Description</th><th>Severity</th><th>Action</th>
+            </tr></thead>
+            <tbody id="alerts-body">
+              <tr><td colspan="6" class="empty">No alerts</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Connections ───────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-connections">
+      <div class="grid-3" id="conn-stat-cards">
+        <div class="card">
+          <div class="card-title">Active Connections</div>
+          <div class="card-value text-blue" id="conn-active-val">0</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Total Seen</div>
+          <div class="card-value" id="conn-total-val">0</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Top Talker</div>
+          <div class="card-value text-orange" id="conn-top-talker" style="font-size:16px">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="flex-between mb8">
+          <div class="card-title" style="margin:0">Live Connections</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadConnections()">Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Source IP</th><th>Destination IP</th><th>Port</th><th>Proto</th>
+              <th>Service</th><th>Duration</th><th>Packets</th><th>State</th><th>Action</th>
+            </tr></thead>
+            <tbody id="connections-body">
+              <tr><td colspan="9" class="empty">No connections</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: IP Analysis ───────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-ip_analysis">
+
+      <!-- LIVE VIEW (Wireshark-style) -->
+      <div id="ip-live-view">
+        <div class="form-row mb8">
+          <span class="text-muted" style="font-size:13px">Live capture — click any IP to analyze</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadIPLive()">&#x21BA; Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleIPLivePause()" id="ip-live-pause-btn">Pause</button>
+          <span id="ip-live-count" class="text-muted" style="font-size:12px"></span>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr>
+                <th>Time</th><th>Source IP</th><th>Hostname</th>
+                <th>Destination</th><th>Port</th><th>Proto</th><th>Flags</th><th>Size</th><th>Service</th>
+              </tr></thead>
+              <tbody id="ip-live-body">
+                <tr><td colspan="9" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- DETAIL VIEW (IP analysis) -->
+      <div id="ip-detail-view" style="display:none">
+        <div class="form-row mb8">
+          <button class="btn btn-ghost btn-sm" onclick="showIPLive()">&#x2190; Back to Live</button>
+          <input type="text" id="ip-input" placeholder="Enter IP address..." style="width:200px">
+          <button class="btn btn-blue" onclick="analyzeIP()">Analyze</button>
+        </div>
+        <div id="ip-result"></div>
+      </div>
+
+    </div>
+
+    <!-- ── TAB: Domain Scan ───────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-domain_scan">
+      <div class="form-row mb8">
+        <input type="text" id="domain-input" placeholder="https://example.com" style="width:280px">
+        <button class="btn btn-blue" id="scan-btn" onclick="scanDomain()">Scan</button>
+        <button class="btn btn-ghost" id="tech-btn" onclick="scanTech()">Detect Tech</button>
+        <button class="btn btn-ghost" id="crawl-btn" onclick="scanCrawl()">Crawl</button>
+        <input type="number" id="crawl-pages" value="8" min="1" max="20" style="width:60px" title="Max pages to crawl">
+        <button class="btn btn-ghost" id="scrape-btn" onclick="scanScrape()">Scrape</button>
+      </div>
+      <div class="form-row mb8" style="align-items:center">
+        <span class="text-muted" style="font-size:12px;white-space:nowrap">Save to:</span>
+        <input type="text" id="scrape-save-dir" placeholder="C:\Users\...\scraped_pages" style="flex:1;min-width:200px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="scrape-assets"> Download assets (CSS/JS/img)
+        </label>
+      </div>
+      <div id="domain-result"></div>
+      <div id="tech-result"></div>
+      <div id="crawl-result"></div>
+      <div id="scrape-result"></div>
+      <div class="section-title">Scan History</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>#</th><th>URL</th><th>Scanned At</th></tr></thead>
+            <tbody id="scan-history-body">
+              <tr><td colspan="3" class="empty">No scans yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Statistics ────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-statistics">
+      <div class="grid-3" id="stats-cards">
+        <div class="card"><div class="card-title">DB Packets Total</div><div class="card-value" id="st-pkt-total">—</div></div>
+        <div class="card"><div class="card-title">DB Alerts Total</div><div class="card-value text-red" id="st-alt-total">—</div></div>
+        <div class="card"><div class="card-title">Alerts (24h)</div><div class="card-value text-orange" id="st-alt-24h">—</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Top Source IPs</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>IP</th><th>Packets</th></tr></thead>
+              <tbody id="st-top-sources"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Top Destination Ports</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Port</th><th>Packets</th></tr></thead>
+              <tbody id="st-top-ports"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Alert Types Breakdown</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Severity</th><th>Count</th></tr></thead>
+            <tbody id="st-alert-types"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card mt8">
+        <div class="card-title">Traffic Timeline (24h)</div>
+        <canvas id="timeline-chart" style="max-height:160px"></canvas>
+      </div>
+    </div>
+
+    <!-- ── TAB: Firewall ──────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-firewall">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Block IP</div>
+          <div class="form-row">
+            <input type="text" id="fw-block-ip" placeholder="IP address..." style="flex:1">
+            <input type="text" id="fw-block-reason" placeholder="Reason (optional)" style="flex:1">
+            <button class="btn btn-red" onclick="firewallBlock()">Block</button>
+          </div>
+          <div id="fw-block-msg" class="text-muted" style="font-size:11px;margin-top:4px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Unblock IP</div>
+          <div class="form-row">
+            <input type="text" id="fw-unblock-ip" placeholder="IP address..." style="flex:1">
+            <button class="btn btn-green" onclick="firewallUnblock()">Unblock</button>
+          </div>
+          <div id="fw-unblock-msg" class="text-muted" style="font-size:11px;margin-top:4px"></div>
+        </div>
+      </div>
+
+      <div class="section-title">Currently Blocked</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>IP</th><th>Blocked At</th><th>Age</th><th>Action</th></tr></thead>
+            <tbody id="fw-active-body">
+              <tr><td colspan="4" class="empty">No blocked IPs</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px">
+        <div class="card">
+          <div class="flex-between mb8">
+            <div class="card-title" style="margin:0">Whitelist</div>
+            <div class="form-row" style="margin:0;gap:6px">
+              <input type="text" id="wl-ip" placeholder="IP..." style="width:130px">
+              <input type="text" id="wl-note" placeholder="Note..." style="width:100px">
+              <button class="btn btn-green btn-sm" onclick="whitelistAdd()">Add</button>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>IP</th><th>Note</th><th></th></tr></thead>
+              <tbody id="fw-whitelist-body">
+                <tr><td colspan="3" class="empty">Empty</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="flex-between mb8">
+            <div class="card-title" style="margin:0">Manual Blacklist</div>
+            <div class="form-row" style="margin:0;gap:6px">
+              <input type="text" id="bl-ip" placeholder="IP..." style="width:130px">
+              <input type="text" id="bl-note" placeholder="Note..." style="width:100px">
+              <button class="btn btn-red btn-sm" onclick="blacklistAdd()">Add</button>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>IP</th><th>Note</th><th></th></tr></thead>
+              <tbody id="fw-blacklist-body">
+                <tr><td colspan="3" class="empty">Empty</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Block History</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>IP</th><th>Type</th><th>Reason</th><th>Blocked At</th><th>Unblocked At</th><th>Status</th></tr></thead>
+            <tbody id="fw-history-body">
+              <tr><td colspan="6" class="empty">No history</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Net Tools ─────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-tools">
+      <div class="grid-2">
+        <!-- Ping -->
+        <div class="card">
+          <div class="card-title">Ping</div>
+          <div class="form-row">
+            <input type="text" id="ping-host" placeholder="host or IP" style="flex:1">
+            <input type="number" id="ping-count" value="4" min="1" max="10" style="width:60px">
+            <button class="btn btn-blue" onclick="runPing()">Run</button>
+          </div>
+          <div id="ping-output" class="output-box" style="display:none"></div>
+        </div>
+        <!-- Traceroute -->
+        <div class="card">
+          <div class="card-title">Traceroute</div>
+          <div class="form-row">
+            <input type="text" id="tracert-host" placeholder="host or IP" style="flex:1">
+            <button class="btn btn-blue" onclick="runTraceroute()">Run</button>
+          </div>
+          <div id="tracert-output" class="output-box" style="display:none"></div>
+        </div>
+        <!-- NSLookup -->
+        <div class="card">
+          <div class="card-title">DNS Lookup</div>
+          <div class="form-row">
+            <input type="text" id="dns-host" placeholder="domain or IP" style="flex:1">
+            <button class="btn btn-blue" onclick="runDNS()">Lookup</button>
+          </div>
+          <div id="dns-output" class="output-box" style="display:none"></div>
+        </div>
+        <!-- Whois -->
+        <div class="card">
+          <div class="card-title">WHOIS</div>
+          <div class="form-row">
+            <input type="text" id="whois-host" placeholder="domain or IP" style="flex:1">
+            <button class="btn btn-blue" onclick="runWhois()">Query</button>
+          </div>
+          <div id="whois-output" class="output-box" style="display:none"></div>
+        </div>
+      </div>
+      <!-- Port Scan -->
+      <div class="card">
+        <div class="card-title">Port Scanner</div>
+        <div class="form-row">
+          <input type="text" id="scan-host" placeholder="host or IP" style="flex:1">
+          <input type="text" id="scan-ports" placeholder="Ports: 1-1024 or 80,443,8080" style="flex:1;max-width:240px">
+          <button class="btn btn-blue" onclick="runPortScan()">Scan</button>
+        </div>
+        <div id="portscan-output" class="output-box" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Logs ──────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-logs">
+      <div class="form-row mb8">
+        <select id="log-lines-sel">
+          <option value="100">Last 100 lines</option>
+          <option value="200" selected>Last 200 lines</option>
+          <option value="500">Last 500 lines</option>
+        </select>
+        <input type="text" id="log-filter" placeholder="Filter lines..." style="width:200px">
+        <button class="btn btn-blue" onclick="loadLogs()">Refresh</button>
+        <button class="btn btn-ghost" onclick="toggleLogLive()"><span id="log-live-txt">Pause</span></button>
+      </div>
+      <div class="card">
+        <div class="card-title">System Log <span id="log-path" class="text-muted"></span></div>
+        <div id="log-output" class="output-box" style="min-height:400px;color:var(--text)"></div>
+      </div>
+    </div>
+
+  </div><!-- .content -->
+</div><!-- .main-area -->
+
+<script>
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+const esc = s => {
+  const m = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+  return String(s).replace(/[&<>"']/g, c => m[c]);
+};
+const fmtTime = ts => new Date(ts * 1000).toLocaleTimeString('en-US', {hour12:false});
+const fmtDate = ts => new Date(ts * 1000).toLocaleString('en-US', {hour12:false});
+const fmtUptime = s => {
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=Math.floor(s%60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+};
+const protoTag = p => {
+  const cls={TCP:'tag-tcp',UDP:'tag-udp',ICMP:'tag-icmp'}[p]||'tag-other';
+  return `<span class="tag ${esc(cls)}">${esc(p)}</span>`;
+};
+const sevTag = s => {
+  const cls={HIGH:'sev-tag-high',MEDIUM:'sev-tag-medium',LOW:'sev-tag-low'}[s]||'';
+  return `<span class="${esc(cls)}">${esc(s)}</span>`;
+};
+const fmtBytes = b => b>1e6?`${(b/1e6).toFixed(1)}MB`:b>1e3?`${(b/1e3).toFixed(1)}KB`:`${b}B`;
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function post(url, body) {
+  return api(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+}
+function showMsg(elId, msg, ok) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  setTimeout(() => { el.textContent = ''; }, 4000);
+}
+function ipLink(ip) {
+  return `<a class="ip-link" onclick="gotoIPAnalysis('${esc(ip)}')">${esc(ip)}</a>`;
+}
+function gotoIPAnalysis(ip) {
+  if (activeTab !== 'ip_analysis') switchTab('ip_analysis');
+  showIPDetail(ip);
+}
+function showIPDetail(ip) {
+  document.getElementById('ip-live-view').style.display = 'none';
+  document.getElementById('ip-detail-view').style.display = '';
+  if (ip) { document.getElementById('ip-input').value = ip; analyzeIP(); }
+}
+function showIPLive() {
+  document.getElementById('ip-detail-view').style.display = 'none';
+  document.getElementById('ip-live-view').style.display = '';
+  loadIPLive();
+}
+
+let _ipLivePaused = false;
+function toggleIPLivePause() {
+  _ipLivePaused = !_ipLivePaused;
+  document.getElementById('ip-live-pause-btn').textContent = _ipLivePaused ? 'Resume' : 'Pause';
+}
+
+async function loadIPLive() {
+  if (_ipLivePaused) return;
+  try {
+    const pkts = await api('/api/db/packets?limit=200');
+    const ct = document.getElementById('ip-live-count');
+    if (ct) ct.textContent = `${pkts.length} packets`;
+    const body = document.getElementById('ip-live-body');
+    if (!body) return;
+    if (!pkts.length) { body.innerHTML = '<tr><td colspan="9" class="empty">No packets captured</td></tr>'; return; }
+    body.innerHTML = pkts.map(p => {
+      const flags = p.protocol==='TCP' ? tcpFlagsStr(p.tcp_flags) : '—';
+      const flagCls = flags.includes('SYN') ? 'color:#10b981' : flags.includes('RST') ? 'color:#ef4444' : 'color:var(--muted)';
+      return `<tr>
+        <td style="white-space:nowrap">${fmtTime(p.timestamp)}</td>
+        <td><a class="ip-link" onclick="showIPDetail('${esc(p.src_ip)}')">${esc(p.src_ip)}</a></td>
+        <td class="text-muted" style="font-size:12px">${esc(p.src_hostname||'')}</td>
+        <td><a class="ip-link" onclick="showIPDetail('${esc(p.dst_ip)}')">${esc(p.dst_ip)}</a></td>
+        <td>${p.dst_port||'—'}</td>
+        <td>${protoTag(p.protocol)}</td>
+        <td style="font-size:12px;${flagCls}">${flags}</td>
+        <td style="white-space:nowrap">${p.size}B</td>
+        <td class="text-muted" style="font-size:12px">${esc(p.service||'')}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.warn('loadIPLive:', e); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab navigation
+// ──────────────────────────────────────────────────────────────────────────────
+const TAB_TITLES = {
+  overview:'Overview', packets:'Packets', alerts:'Alerts', connections:'Connections',
+  ip_analysis:'IP Analysis', domain_scan:'Domain Scanner', statistics:'Statistics',
+  firewall:'Firewall', tools:'Network Tools', logs:'Logs'
+};
+let activeTab = 'overview';
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.dataset.tab === name) n.classList.add('active');
+  });
+  document.getElementById('page-title').textContent = TAB_TITLES[name] || name;
+  activeTab = name;
+  onTabSwitch(name);
+}
+
+document.querySelectorAll('.nav-item').forEach(n => {
+  n.addEventListener('click', () => switchTab(n.dataset.tab));
+});
+
+function onTabSwitch(name) {
+  if (name === 'statistics') loadStatistics();
+  if (name === 'firewall') loadFirewallTab();
+  if (name === 'logs') loadLogs();
+  if (name === 'connections') loadConnections();
+  if (name === 'alerts') loadAlerts();
+  if (name === 'packets') loadPackets();
+  if (name === 'domain_scan') loadScanHistory();
+  if (name === 'ip_analysis') { showIPLive(); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Charts
+// ──────────────────────────────────────────────────────────────────────────────
+const protoChart = new Chart(
+  document.getElementById('proto-chart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['TCP','UDP','ICMP','Other'],
+      datasets:[{
+        data: [0,0,0,0],
+        backgroundColor: ['rgba(59,130,246,.75)','rgba(16,185,129,.75)','rgba(139,92,246,.75)','rgba(107,114,128,.65)'],
+        borderColor:     ['#3b82f6','#10b981','#8b5cf6','#6b7280'],
+        borderWidth: 1, borderRadius: 4,
+      }]
+    },
+    options:{
+      indexAxis: 'y',
+      responsive: true, animation: false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label: ctx => {
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0)||1;
+          return ` ${ctx.raw.toLocaleString()} pkts (${(ctx.raw/total*100).toFixed(1)}%)`;
+        }}}
+      },
+      scales:{
+        x:{ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}},
+        y:{ticks:{color:'#9ca3af',font:{size:11},padding:4},grid:{display:false}}
+      }
+    }
+  }
+);
+
+const sparkCtx = document.getElementById('sparkline-canvas').getContext('2d');
+const sparkChart = new Chart(sparkCtx, {
+  type: 'bar',
+  data: {labels:[], datasets:[{
+    data: [],
+    backgroundColor: 'rgba(59,130,246,.55)',
+    borderColor: '#3b82f6',
+    borderWidth: 0, borderRadius: 3,
+    hoverBackgroundColor: 'rgba(59,130,246,.85)',
+  }]},
+  options:{
+    responsive:true, animation:false,
+    scales:{
+      x:{display:false},
+      y:{display:true, ticks:{color:'#6b7280',font:{size:10}}, grid:{color:'rgba(255,255,255,.04)'}}
+    },
+    plugins:{legend:{display:false}, tooltip:{callbacks:{title: items => items[0]?.label||'', label: ctx => ` ${ctx.raw} pkt/s`}}}
+  }
+});
+
+let timelineChart = null;
+function buildTimelineChart(data) {
+  const ctx = document.getElementById('timeline-chart').getContext('2d');
+  if (timelineChart) timelineChart.destroy();
+  timelineChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: data.map(d => `H+${d.h}`),
+      datasets:[{data:data.map(d=>d.cnt),backgroundColor:'rgba(59,130,246,.5)',borderColor:'#3b82f6',borderWidth:1}]
+    },
+    options:{responsive:true,animation:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7280',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}}}}
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Overview live refresh
+// ──────────────────────────────────────────────────────────────────────────────
+let prevPackets = null, prevTime = null, failCount = 0;
+
+async function refreshOverview() {
+  try {
+    const [stats, blocked, alerts, health, series, talkers, dbstats] = await Promise.all([
+      api('/api/stats'), api('/api/blocked'), api('/api/alerts?limit=8'),
+      api('/api/health'), api('/api/traffic/series'), api('/api/connections/top?limit=5'),
+      api('/api/db/stats'),
+    ]);
+    failCount = 0;
+    document.getElementById('conn-err').style.display = 'none';
+
+    const degraded = health.degraded === true;
+    document.getElementById('degraded-banner').style.display = degraded ? 'block' : 'none';
+    const dotClass = 'status-dot ' + (health.sniffer ? 'pulse' : 'error');
+    document.getElementById('sbar-dot').className = dotClass;
+
+    const up = stats.uptime || 0;
+    const upFmt = fmtUptime(up);
+    document.getElementById('uptime-display').textContent = upFmt;
+    document.getElementById('sbar-uptime').textContent = upFmt;
+
+    const totalPkts = stats.total_packets || 0;
+    const totalAlerts = stats.total_alerts || 0;
+    const blockedCount = blocked.length;
+    document.getElementById('ov-packets').textContent = totalPkts.toLocaleString();
+    document.getElementById('ov-alerts').textContent = totalAlerts.toLocaleString();
+    document.getElementById('ov-alerts-sub').textContent = `${(dbstats.alerts_24h||0).toLocaleString()} in last 24h`;
+    document.getElementById('ov-blocked').textContent = (dbstats.blocked_active||blockedCount).toLocaleString();
+    document.getElementById('ov-blocked-sub').textContent = `${(dbstats.blocked_total||0)} total blocked`;
+    document.getElementById('ov-conns').textContent = (stats.active_connections || 0).toLocaleString();
+    document.getElementById('ov-proto').textContent = `TCP ${stats.tcp||0} / UDP ${stats.udp||0} / ICMP ${stats.icmp||0}`;
+
+    // Health strip
+    const ok = s => `<span class="text-green">● ${s}</span>`;
+    const err = s => `<span class="text-red">● ${s}</span>`;
+    document.getElementById('h-ids').innerHTML = health.ids ? ok('Running') : err('Down');
+    document.getElementById('h-ips').innerHTML = health.ips ? ok('Running') : err('Down');
+    document.getElementById('h-sniff').innerHTML = health.sniffer ? ok('Live') : (degraded ? '<span class="text-orange">● Degraded</span>' : err('Down'));
+    document.getElementById('h-pkt24').textContent = (dbstats.packets_24h||0).toLocaleString();
+    document.getElementById('h-alt24').textContent = (dbstats.alerts_24h||0).toLocaleString();
+    document.getElementById('h-dbtotal').textContent = `${(dbstats.total_packets_db||0).toLocaleString()} pkts`;
+    document.getElementById('h-ts').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
+
+    const now = Date.now();
+    if (prevPackets !== null && prevTime !== null) {
+      const elapsed = (now - prevTime) / 1000;
+      const pps = elapsed > 0 ? ((totalPkts - prevPackets) / elapsed).toFixed(1) : '0.0';
+      document.getElementById('ov-pps').textContent = `${pps} pkt/s`;
+    }
+    prevPackets = totalPkts; prevTime = now;
+
+    const _tcp=stats.tcp||0,_udp=stats.udp||0,_icmp=stats.icmp||0,_oth=stats.other||0;
+    const _tot=_tcp+_udp+_icmp+_oth||1;
+    protoChart.data.datasets[0].data = [_tcp,_udp,_icmp,_oth];
+    protoChart.update('none');
+    const ps = document.getElementById('proto-stats');
+    if (ps) ps.innerHTML = [
+      ['TCP',_tcp,'#3b82f6'],['UDP',_udp,'#10b981'],['ICMP',_icmp,'#8b5cf6'],['Other',_oth,'#6b7280']
+    ].map(([l,v,c])=>`<div><span style="color:${c}">${l}</span> <span style="font-variant-numeric:tabular-nums">${v.toLocaleString()}</span> <span class="text-muted">${(v/_tot*100).toFixed(1)}%</span></div>`).join('');
+    updateTrafficBars(stats);
+
+    // Sparkline
+    if (series.length) {
+      sparkChart.data.labels = series.map(s => fmtTime(s.ts));
+      sparkChart.data.datasets[0].data = series.map(s => s.count);
+      sparkChart.update('none');
+    }
+
+    // Recent alerts
+    const ab = document.getElementById('ov-alerts-body');
+    if (!alerts.length) {
+      ab.innerHTML = '<tr><td colspan="4" class="empty">No alerts</td></tr>';
+    } else {
+      ab.innerHTML = alerts.slice().reverse().map(a =>
+        `<tr><td>${fmtTime(a.timestamp)}</td><td>${esc(a.type)}</td><td>${ipLink(a.src_ip)}</td><td>${sevTag(a.severity)}</td></tr>`
+      ).join('');
+    }
+
+    // Top talkers
+    const tb = document.getElementById('ov-talkers-body');
+    if (!talkers.length) {
+      tb.innerHTML = '<tr><td colspan="3" class="empty">No data</td></tr>';
+    } else {
+      tb.innerHTML = talkers.map(t =>
+        `<tr><td>${ipLink(t.ip)}</td><td>${t.packets.toLocaleString()}</td><td>${t.connections}</td></tr>`
+      ).join('');
+    }
+
+  } catch(e) {
+    failCount++;
+    if (failCount >= 3) {
+      document.getElementById('conn-err').style.display = 'inline';
+      document.getElementById('sbar-dot').className = 'status-dot error';
+    }
+    console.warn('Overview refresh error:', e);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Packets tab
+// ──────────────────────────────────────────────────────────────────────────────
+let packetLive = true;
+
+function tcpFlagsStr(flags) {
+  if (!flags && flags !== 0) return '-';
+  const f = parseInt(flags);
+  const names = [];
+  if (f & 0x01) names.push('FIN');
+  if (f & 0x02) names.push('SYN');
+  if (f & 0x04) names.push('RST');
+  if (f & 0x08) names.push('PSH');
+  if (f & 0x10) names.push('ACK');
+  if (f & 0x20) names.push('URG');
+  return names.length ? names.join('|') : '-';
+}
+
+async function loadPackets() {
+  const proto = document.getElementById('pkt-proto-filter').value;
+  const ip = document.getElementById('pkt-ip-filter').value.trim();
+  const dstport = document.getElementById('pkt-dstport-filter').value.trim();
+  let url = `/api/db/packets?limit=200`;
+  if (proto) url += `&protocol=${encodeURIComponent(proto)}`;
+  if (ip) url += `&src_ip=${encodeURIComponent(ip)}`;
+  if (dstport) url += `&dst_port=${encodeURIComponent(dstport)}`;
+  try {
+    const pkts = await api(url);
+    document.getElementById('pkt-count').textContent = `(${pkts.length})`;
+    const pb = document.getElementById('packets-body');
+    if (!pkts.length) {
+      pb.innerHTML = '<tr><td colspan="8" class="empty">No packets</td></tr>';
+      return;
+    }
+    pb.innerHTML = pkts.map(p => {
+      const flags = p.protocol==='TCP' ? `<span class="text-muted" style="font-size:10px">${tcpFlagsStr(p.tcp_flags)}</span>` : '-';
+      return `<tr><td>${fmtTime(p.timestamp)}</td><td>${ipLink(p.src_ip)}</td><td>${ipLink(p.dst_ip)}</td>` +
+        `<td>${p.dst_port||'-'}</td><td>${protoTag(p.protocol)}</td><td>${flags}</td>` +
+        `<td>${p.size}B</td><td class="text-muted">${esc(p.service||p.src_hostname||'')}</td></tr>`;
+    }).join('');
+  } catch(e) { console.warn('loadPackets:', e); }
+}
+
+function togglePacketLive() {
+  packetLive = !packetLive;
+  document.getElementById('live-btn-text').textContent = packetLive ? 'Pause Live' : 'Resume Live';
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Alerts tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadAlerts() {
+  const sev = document.getElementById('alert-sev-filter').value;
+  const search = document.getElementById('alert-search').value.trim();
+  let url = '/api/alerts?limit=200';
+  if (sev) url += `&severity=${encodeURIComponent(sev)}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  try {
+    const alerts = await api(url);
+    document.getElementById('alert-count').textContent = `(${alerts.length})`;
+    const ab = document.getElementById('alerts-body');
+    if (!alerts.length) {
+      ab.innerHTML = '<tr><td colspan="6" class="empty">No alerts</td></tr>';
+      return;
+    }
+    ab.innerHTML = alerts.map(a =>
+      `<tr><td>${fmtTime(a.timestamp)}</td><td>${esc(a.type)}</td><td>${ipLink(a.src_ip)}</td>` +
+      `<td>${esc(a.message)}</td><td>${sevTag(a.severity)}</td>` +
+      `<td><button class="btn btn-red btn-sm" onclick="quickBlock('${esc(a.src_ip)}')">Block</button></td></tr>`
+    ).join('');
+  } catch(e) { console.warn('loadAlerts:', e); }
+}
+
+async function quickBlock(ip) {
+  try {
+    await post('/api/firewall/block', {ip, reason:'blocked from alerts'});
+    loadAlerts();
+  } catch(e) { alert('Block failed: ' + e.message); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Connections tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadConnections() {
+  try {
+    const [conns, stats] = await Promise.all([api('/api/connections?limit=100'), api('/api/stats')]);
+    document.getElementById('conn-active-val').textContent = (stats.active_connections||0).toLocaleString();
+    document.getElementById('conn-total-val').textContent = (stats.total_connections||0).toLocaleString();
+
+    const cb = document.getElementById('connections-body');
+    if (!conns.length) {
+      cb.innerHTML = '<tr><td colspan="9" class="empty">No connections</td></tr>';
+      document.getElementById('conn-top-talker').textContent = '—';
+      return;
+    }
+    const top = conns.reduce((a,b) => b.packets > a.packets ? b : a, conns[0]);
+    document.getElementById('conn-top-talker').textContent = top.src_ip;
+    cb.innerHTML = conns.map(c =>
+      `<tr><td>${ipLink(c.src_ip)}</td><td>${ipLink(c.dst_ip)}</td><td>${c.dst_port||'-'}</td>` +
+      `<td>${protoTag(c.protocol)}</td><td class="text-muted">${esc(c.service||'')}</td>` +
+      `<td>${c.duration}s</td><td>${c.packets}</td>` +
+      `<td><span class="badge ${c.state==='ACTIVE'?'badge-green':'badge-yellow'}">${esc(c.state)}</span></td>` +
+      `<td><button class="btn btn-red btn-sm" onclick="quickBlock('${esc(c.src_ip)}')">Block</button></td></tr>`
+    ).join('');
+  } catch(e) { console.warn('loadConnections:', e); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// IP Analysis tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function analyzeIP() {
+  const ip = document.getElementById('ip-input').value.trim();
+  if (!ip) return;
+  const el = document.getElementById('ip-result');
+  el.innerHTML = '<div><span class="spinner"></span>Analyzing...</div>';
+  try {
+    const d = await api(`/api/ip/analyze?ip=${encodeURIComponent(ip)}`);
+    const geo = d.geo || {};
+    const hist = d.history || {};
+    const pkts = hist.packets || [];
+    const alts = hist.alerts || [];
+    const blks = hist.blocked_history || [];
+
+    let html = `
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Geolocation</div>
+        <div style="line-height:1.8;font-size:12px">
+          <div><span class="text-muted">Country:</span> ${esc(geo.country||'—')} ${esc(geo.countryCode||'')}</div>
+          <div><span class="text-muted">City:</span> ${esc(geo.city||'—')}</div>
+          <div><span class="text-muted">ISP:</span> ${esc(geo.isp||'—')}</div>
+          <div><span class="text-muted">ASN:</span> ${esc(geo.as||'—')}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Identity</div>
+        <div style="line-height:1.8;font-size:12px">
+          <div><span class="text-muted">Hostname:</span> ${esc(d.hostname||'—')}</div>
+          <div><span class="text-muted">Org:</span> ${esc(geo.org||'—')}</div>
+          <div><span class="text-muted">Region:</span> ${esc(geo.regionName||'—')}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Status</div>
+        <div style="line-height:2;font-size:12px">
+          <div>Blocked: <span class="${d.is_blocked?'text-red':'text-green'}">${d.is_blocked?'YES':'NO'}</span></div>
+          <div>Whitelisted: <span class="${d.is_whitelisted?'text-green':'text-muted'}">${d.is_whitelisted?'YES':'NO'}</span></div>
+          <div>DB Packets: <span class="text-blue">${pkts.length}</span></div>
+          <div>DB Alerts: <span class="${alts.length?'text-red':'text-muted'}">${alts.length}</span></div>
+        </div>
+      </div>
+    </div>`;
+
+    if (alts.length) {
+      html += `<div class="card mt8"><div class="card-title">Alert History (${alts.length})</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Time</th><th>Type</th><th>Severity</th><th>Message</th></tr></thead><tbody>
+      ${alts.slice(0,10).map(a=>`<tr><td>${fmtTime(a.timestamp)}</td><td>${esc(a.type)}</td><td>${sevTag(a.severity)}</td><td>${esc(a.message)}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+    }
+
+    if (pkts.length) {
+      html += `<div class="card mt8"><div class="card-title">Recent Packets (${pkts.length})</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Time</th><th>Src</th><th>Dst</th><th>Port</th><th>Proto</th><th>Size</th></tr></thead><tbody>
+      ${pkts.slice(0,15).map(p=>`<tr><td>${fmtTime(p.timestamp)}</td><td>${esc(p.src_ip)}</td><td>${esc(p.dst_ip)}</td><td>${p.dst_port||'-'}</td><td>${protoTag(p.protocol)}</td><td>${p.size}B</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="output-box error">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Domain Scanner tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function scanDomain() {
+  const url = document.getElementById('domain-input').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Scanning...';
+  const el = document.getElementById('domain-result');
+  el.innerHTML = '';
+  try {
+    const d = await post('/api/scan/domain', {url});
+    const tls = d.tls || {};
+    const headers = d.security_headers || {};
+    const missing = d.missing_critical || [];
+    const scoreColor = d.risk_score > 50 ? 'text-red' : d.risk_score > 25 ? 'text-orange' : 'text-green';
+
+    let html = `
+    <div class="grid-4">
+      <div class="card"><div class="card-title">Status</div><div class="card-value ${d.status_code===200?'text-green':'text-red'}">${d.status_code||'ERR'}</div><div class="card-sub">${esc(d.content_type||'')}</div></div>
+      <div class="card"><div class="card-title">Response Time</div><div class="card-value">${d.response_time_ms||'—'}<span style="font-size:14px">ms</span></div></div>
+      <div class="card"><div class="card-title">Risk Score</div><div class="card-value ${scoreColor}">${d.risk_score||0}</div><div class="card-sub">${missing.length} missing headers</div></div>
+      <div class="card"><div class="card-title">TLS</div><div class="card-value ${tls.version?'text-green':'text-muted'}">${esc(tls.version||'N/A')}</div><div class="card-sub">${esc(tls.issuer_cn||'')}</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Security Headers</div>
+        <div style="font-size:12px;line-height:2">`;
+
+    const hdrMap = {
+      'HSTS':'Strict-Transport-Security',
+      'Content-Security-Policy':'Content-Security-Policy',
+      'X-Frame-Options':'X-Frame-Options',
+      'X-Content-Type-Options':'X-Content-Type-Options',
+      'Referrer-Policy':'Referrer-Policy',
+      'Permissions-Policy':'Permissions-Policy',
+      'X-XSS-Protection':'X-XSS-Protection',
+      'COOP':'Cross-Origin-Opener-Policy',
+    };
+    for (const [apiKey, label] of Object.entries(hdrMap)) {
+      const hdr = headers[apiKey] || {};
+      const present = hdr.present === true;
+      const val = hdr.value || '';
+      html += `<div><span class="${present?'text-green':'text-red'}">${present?'✓':'✗'}</span> ${esc(label)}`;
+      if (present && val) html += ` <span class="text-muted" style="font-size:10px">${esc(val.substring(0,60))}</span>`;
+      html += `</div>`;
+    }
+    html += `</div></div>
+      <div class="card">
+        <div class="card-title">TLS Certificate</div>
+        <div style="font-size:12px;line-height:2">
+          <div><span class="text-muted">Subject CN:</span> ${esc(tls.cn||'—')}</div>
+          <div><span class="text-muted">Issuer:</span> ${esc(tls.issuer_cn||'—')}</div>
+          <div><span class="text-muted">Valid Until:</span> ${esc(tls.not_after||'—')}</div>
+          <div><span class="text-muted">Protocol:</span> ${esc(tls.version||'—')}</div>
+          <div><span class="text-muted">Cipher:</span> ${esc(tls.cipher||'—')}</div>
+          <div><span class="text-muted">Server:</span> ${esc(d.server||'—')}</div>
+          <div><span class="text-muted">Title:</span> ${esc(d.title||'—')}</div>
+        </div>
+      </div>
+    </div>`;
+
+    if (d.links && d.links.length) {
+      html += `<div class="card"><div class="card-title">Links Found (${d.links.length})</div><div class="output-box" style="max-height:200px">${d.links.slice(0,30).map(l=>esc(typeof l==='object'?(l.full||l.href||''):l)).join('\n')}</div></div>`;
+    }
+
+    if (d.robots_txt) {
+      html += `<div class="card mt8"><div class="card-title">robots.txt</div><div class="output-box" style="max-height:160px">${esc(d.robots_txt)}</div></div>`;
+    }
+
+    el.innerHTML = html;
+    loadScanHistory();
+  } catch(e) {
+    el.innerHTML = `<div class="output-box error">Error: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+  }
+}
+
+async function loadScanHistory() {
+  try {
+    const hist = await api('/api/scan/history');
+    const sb = document.getElementById('scan-history-body');
+    if (!hist.length) { sb.innerHTML = '<tr><td colspan="3" class="empty">No scans yet</td></tr>'; return; }
+    sb.innerHTML = hist.map(h =>
+      `<tr><td>${h.id}</td><td class="text-blue" style="cursor:pointer" onclick="document.getElementById('domain-input').value='${esc(h.url)}'">${esc(h.url)}</td><td>${fmtDate(h.scanned_at)}</td></tr>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function scanTech() {
+  const url = document.getElementById('domain-input').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('tech-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Detecting...';
+  const el = document.getElementById('tech-result');
+  el.innerHTML = '';
+  try {
+    const d = await post('/api/scan/tech', {url});
+    const tech = d.tech || [];
+    if (!tech.length) {
+      el.innerHTML = '<div class="card mt8"><div class="card-title">Tech Detection</div><div class="empty">No technologies detected</div></div>';
+    } else {
+      el.innerHTML = `<div class="card mt8">
+        <div class="card-title">Detected Technologies (${tech.length})</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Technology</th><th>Source</th><th>Indicator</th></tr></thead>
+          <tbody>${tech.map(t=>`<tr><td class="text-blue">${esc(t.name)}</td><td class="text-muted">${esc(t.source)}</td><td class="text-muted" style="font-size:10px">${esc(t.value||'')}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="output-box error mt8">Tech detection error: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Detect Tech';
+  }
+}
+
+async function scanCrawl() {
+  const url = document.getElementById('domain-input').value.trim();
+  if (!url) return;
+  const maxPages = parseInt(document.getElementById('crawl-pages').value) || 8;
+  const btn = document.getElementById('crawl-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Crawling...';
+  const el = document.getElementById('crawl-result');
+  el.innerHTML = '';
+  try {
+    const d = await post('/api/scan/crawl', {url, max_pages: maxPages, fake_ua: true});
+    const pages = d.pages || [];
+    el.innerHTML = `<div class="card mt8">
+      <div class="card-title">Crawl Results — ${d.pages_crawled} pages <span class="text-muted" style="font-size:10px">UA: ${esc((d.user_agent||'').substring(0,60))}</span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>URL</th><th>Status</th><th>Title</th><th>Links</th><th>Size</th><th>ms</th></tr></thead>
+        <tbody>${pages.map(p=>`<tr>
+          <td class="text-blue" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.url)}">${esc(p.url.substring(0,60))}</td>
+          <td><span class="${p.status===200?'text-green':'text-red'}">${p.status||'ERR'}</span></td>
+          <td class="text-muted">${esc((p.title||'').substring(0,40))}</td>
+          <td>${p.links_found||0}</td>
+          <td>${p.size_bytes?fmtBytes(p.size_bytes):'—'}</td>
+          <td class="text-muted">${p.response_ms||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      ${d.errors&&d.errors.length?`<div class="text-muted" style="font-size:10px;margin-top:6px">${d.errors.length} error(s): ${esc(d.errors.slice(0,3).join('; '))}</div>`:''}
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="output-box error mt8">Crawl error: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crawl';
+  }
+}
+
+async function scanScrape() {
+  const url = document.getElementById('domain-input').value.trim();
+  if (!url) return;
+  const saveDir = document.getElementById('scrape-save-dir').value.trim();
+  if (!saveDir) {
+    document.getElementById('scrape-result').innerHTML = '<div class="output-box error mt8">Please enter a save directory path in the "Save to:" field.</div>';
+    return;
+  }
+  const includeAssets = document.getElementById('scrape-assets').checked;
+  const btn = document.getElementById('scrape-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Scraping...';
+  const el = document.getElementById('scrape-result');
+  el.innerHTML = '';
+  try {
+    const d = await post('/api/scan/scrape', {url, save_dir: saveDir, include_assets: includeAssets});
+    if (d.error) {
+      el.innerHTML = `<div class="output-box error mt8">Scrape error: ${esc(d.error)}</div>`;
+      return;
+    }
+    const scoreColor = d.status_code === 200 ? 'text-green' : 'text-orange';
+    el.innerHTML = `<div class="card mt8">
+      <div class="card-title">Scrape Complete &mdash; <span class="${scoreColor}">${d.status_code||'—'}</span> &nbsp; ${esc(d.response_ms||'—')}ms &nbsp; ${fmtBytes(d.size_bytes||0)}</div>
+      <div style="font-size:12px;line-height:1.9;margin-bottom:8px">
+        <div><span class="text-muted">Title:</span> ${esc(d.title||'—')}</div>
+        <div><span class="text-muted">Saved to:</span> <span class="text-blue">${esc(d.save_dir||saveDir)}</span></div>
+        <div><span class="text-muted">Files saved:</span> <span class="text-green">${(d.files_saved||[]).length}</span>
+          &nbsp;|&nbsp; <span class="text-muted">Links:</span> ${d.links_count||0}
+          &nbsp;|&nbsp; <span class="text-muted">Images:</span> ${(d.images||[]).length}
+          &nbsp;|&nbsp; <span class="text-muted">Scripts:</span> ${(d.scripts||[]).length}
+          &nbsp;|&nbsp; <span class="text-muted">CSS:</span> ${(d.stylesheets||[]).length}
+          ${includeAssets ? `&nbsp;|&nbsp; <span class="text-muted">Assets DL:</span> <span class="text-green">${d.assets_downloaded||0}</span>` : ''}
+        </div>
+      </div>
+      ${(d.files_saved||[]).length ? `<div class="card-title">Files Written</div><div class="output-box" style="max-height:100px">${d.files_saved.map(f=>esc(f)).join('\n')}</div>` : ''}
+      ${(d.links||[]).length ? `<div class="card-title" style="margin-top:10px">Links Extracted (${d.links_count||d.links.length} total — showing first 40)</div>
+        <div class="output-box" style="max-height:180px">${d.links.slice(0,40).map(l=>esc(l)).join('\n')}</div>` : ''}
+      ${(d.images||[]).length ? `<div class="card-title" style="margin-top:10px">Images (${d.images.length})</div>
+        <div class="output-box" style="max-height:100px">${d.images.slice(0,20).map(l=>esc(l)).join('\n')}</div>` : ''}
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="output-box error mt8">Scrape error: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scrape';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Statistics tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadStatistics() {
+  try {
+    const [summary, sources, ports, types, timeline] = await Promise.all([
+      api('/api/db/stats'), api('/api/db/top_sources'), api('/api/db/top_ports'),
+      api('/api/db/alert_types'), api('/api/db/timeline?hours=24'),
+    ]);
+    document.getElementById('st-pkt-total').textContent = (summary.total_packets_db||0).toLocaleString();
+    document.getElementById('st-alt-total').textContent = (summary.total_alerts_db||0).toLocaleString();
+    document.getElementById('st-alt-24h').textContent = (summary.alerts_24h||0).toLocaleString();
+
+    const ss = document.getElementById('st-top-sources');
+    ss.innerHTML = sources.length
+      ? sources.map(s=>`<tr><td>${ipLink(s.src_ip)}</td><td>${s.cnt.toLocaleString()}</td></tr>`).join('')
+      : '<tr><td colspan="2" class="empty">No data</td></tr>';
+
+    const sp = document.getElementById('st-top-ports');
+    sp.innerHTML = ports.length
+      ? ports.map(p=>`<tr><td>${p.dst_port}</td><td>${p.cnt.toLocaleString()}</td></tr>`).join('')
+      : '<tr><td colspan="2" class="empty">No data</td></tr>';
+
+    const sat = document.getElementById('st-alert-types');
+    sat.innerHTML = types.length
+      ? types.map(t=>`<tr><td>${esc(t.type)}</td><td>${sevTag(t.severity)}</td><td>${t.cnt}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty">No data</td></tr>';
+
+    if (timeline.length) buildTimelineChart(timeline);
+  } catch(e) { console.warn('loadStatistics:', e); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Firewall tab
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadFirewallTab() {
+  try {
+    const [active, whitelist, blacklist, history] = await Promise.all([
+      api('/api/blocked'), api('/api/whitelist'),
+      api('/api/blacklist'), api('/api/firewall/blocked_history'),
+    ]);
+
+    // Active blocked
+    const fb = document.getElementById('fw-active-body');
+    fb.innerHTML = active.length
+      ? active.map(b =>
+          `<tr><td class="text-red">${esc(b.ip)}</td><td>${fmtTime(b.blocked_at)}</td>` +
+          `<td>${Math.floor(b.age/60)}m ${b.age%60}s</td>` +
+          `<td><button class="btn btn-green btn-sm" onclick="firewallUnblockDirect('${esc(b.ip)}')">Unblock</button></td></tr>`
+        ).join('')
+      : '<tr><td colspan="4" class="empty">No blocked IPs</td></tr>';
+
+    // Whitelist
+    const wl = document.getElementById('fw-whitelist-body');
+    wl.innerHTML = whitelist.length
+      ? whitelist.map(w =>
+          `<tr><td>${esc(w.ip)}</td><td class="text-muted">${esc(w.note||'')}</td>` +
+          `<td><button class="btn btn-ghost btn-sm" onclick="whitelistRemove('${esc(w.ip)}')">Remove</button></td></tr>`
+        ).join('')
+      : '<tr><td colspan="3" class="empty">Empty</td></tr>';
+
+    // Blacklist
+    const bl = document.getElementById('fw-blacklist-body');
+    bl.innerHTML = blacklist.length
+      ? blacklist.map(b =>
+          `<tr><td>${esc(b.ip)}</td><td class="text-muted">${esc(b.note||'')}</td>` +
+          `<td><button class="btn btn-ghost btn-sm" onclick="blacklistRemove('${esc(b.ip)}')">Remove</button></td></tr>`
+        ).join('')
+      : '<tr><td colspan="3" class="empty">Empty</td></tr>';
+
+    // History
+    const hb = document.getElementById('fw-history-body');
+    hb.innerHTML = history.length
+      ? history.slice(0,50).map(h =>
+          `<tr><td>${esc(h.ip)}</td><td>${esc(h.block_type||'auto')}</td>` +
+          `<td class="text-muted">${esc((h.reason||'').substring(0,50))}</td>` +
+          `<td>${fmtDate(h.blocked_at)}</td>` +
+          `<td>${h.unblocked_at ? fmtDate(h.unblocked_at) : '<span class="text-muted">—</span>'}</td>` +
+          `<td><span class="badge ${h.active?'badge-red':'badge-yellow'}">${h.active?'Active':'Expired'}</span></td></tr>`
+        ).join('')
+      : '<tr><td colspan="6" class="empty">No history</td></tr>';
+  } catch(e) { console.warn('loadFirewallTab:', e); }
+}
+
+async function firewallBlock() {
+  const ip = document.getElementById('fw-block-ip').value.trim();
+  const reason = document.getElementById('fw-block-reason').value.trim() || 'manual';
+  if (!ip) return;
+  try {
+    await post('/api/firewall/block', {ip, reason});
+    showMsg('fw-block-msg', `Blocked: ${ip}`, true);
+    document.getElementById('fw-block-ip').value = '';
+    loadFirewallTab();
+  } catch(e) { showMsg('fw-block-msg', e.message, false); }
+}
+
+async function firewallUnblock() {
+  const ip = document.getElementById('fw-unblock-ip').value.trim();
+  if (!ip) return;
+  try {
+    await post('/api/firewall/unblock', {ip});
+    showMsg('fw-unblock-msg', `Unblocked: ${ip}`, true);
+    document.getElementById('fw-unblock-ip').value = '';
+    loadFirewallTab();
+  } catch(e) { showMsg('fw-unblock-msg', e.message, false); }
+}
+
+async function firewallUnblockDirect(ip) {
+  try {
+    await post('/api/firewall/unblock', {ip});
+    loadFirewallTab();
+  } catch(e) { alert('Unblock failed: ' + e.message); }
+}
+
+async function whitelistAdd() {
+  const ip = document.getElementById('wl-ip').value.trim();
+  const note = document.getElementById('wl-note').value.trim();
+  if (!ip) return;
+  try {
+    await post('/api/whitelist', {ip, note});
+    document.getElementById('wl-ip').value = '';
+    document.getElementById('wl-note').value = '';
+    loadFirewallTab();
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
+async function whitelistRemove(ip) {
+  try {
+    await fetch('/api/whitelist', {method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})});
+    loadFirewallTab();
+  } catch(e) {}
+}
+
+async function blacklistAdd() {
+  const ip = document.getElementById('bl-ip').value.trim();
+  const note = document.getElementById('bl-note').value.trim();
+  if (!ip) return;
+  try {
+    await post('/api/blacklist', {ip, note});
+    document.getElementById('bl-ip').value = '';
+    document.getElementById('bl-note').value = '';
+    loadFirewallTab();
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
+async function blacklistRemove(ip) {
+  try {
+    await fetch('/api/blacklist', {method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})});
+    loadFirewallTab();
+  } catch(e) {}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Network Tools tab
+// ──────────────────────────────────────────────────────────────────────────────
+function renderToolOutput(id, data) {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  if (typeof data === 'string') {
+    el.textContent = data;
+    el.className = 'output-box error';
+    return;
+  }
+  // ping / traceroute: {stdout, stderr, returncode}
+  if (data.stdout !== undefined || data.returncode !== undefined) {
+    const out = (data.stdout || '') + (data.stderr ? '\n[stderr] ' + data.stderr : '');
+    el.textContent = out.trim() || '(no output)';
+    el.className = 'output-box' + (data.returncode !== 0 ? ' error' : '');
+    return;
+  }
+  // whois: {output, source}
+  if (data.output !== undefined) {
+    el.textContent = data.output.trim();
+    el.className = 'output-box' + (data.source === 'error' ? ' error' : '');
+    return;
+  }
+  // port scan: {host, scanned, open, closed, errors}
+  if (data.open !== undefined) {
+    const open = data.open || [];
+    let txt = `┌─ Host: ${data.host}  Scanned: ${data.scanned} ports  Open: ${open.length}  Closed: ${data.closed}\n`;
+    if (open.length) {
+      txt += '├' + '─'.repeat(38) + '\n';
+      txt += open.map(p => `│  ${String(p.port).padEnd(7)} ${(p.service||'unknown').padEnd(20)}`).join('\n');
+    } else {
+      txt += '│  No open ports found';
+    }
+    if (data.errors && data.errors.length) txt += `\n│\n│  Errors: ${data.errors.join(', ')}`;
+    txt += '\n└' + '─'.repeat(38);
+    el.textContent = txt;
+    el.className = 'output-box';
+    return;
+  }
+  // DNS: {A: [...], MX: [...], ...} or {host, type, results, errors}
+  if (data.results !== undefined) {
+    let txt = `Host: ${data.host}  Type: ${data.type}\n${'─'.repeat(30)}\n`;
+    txt += data.results.length ? data.results.join('\n') : 'No records found';
+    if (data.errors && data.errors.length) txt += `\nErrors: ${data.errors.join('; ')}`;
+    el.textContent = txt;
+    el.className = 'output-box';
+    return;
+  }
+  // dns_lookup_all: {A: [...], MX: [...], ...}
+  if (typeof data === 'object' && !data.error) {
+    let txt = '';
+    for (const [type, records] of Object.entries(data)) {
+      if (Array.isArray(records) && records.length) {
+        txt += `── ${type}\n` + records.map(r => `   ${r}`).join('\n') + '\n\n';
+      }
+    }
+    el.textContent = txt.trim() || 'No DNS records found';
+    el.className = 'output-box';
+    return;
+  }
+  // fallback / error
+  el.textContent = data.error || JSON.stringify(data, null, 2);
+  el.className = 'output-box' + (data.error ? ' error' : '');
+}
+
+async function runTool(outputId, url, body) {
+  const el = document.getElementById(outputId);
+  el.style.display = 'block';
+  el.innerHTML = '<span class="spinner"></span> Running...';
+  el.className = 'output-box';
+  try {
+    const r = await post(url, body);
+    renderToolOutput(outputId, r);
+  } catch(e) { renderToolOutput(outputId, e.message); }
+}
+
+function runPing() {
+  const h = document.getElementById('ping-host').value.trim();
+  if (!h) return;
+  runTool('ping-output', '/api/tools/ping', {host: h, count: parseInt(document.getElementById('ping-count').value)||4});
+}
+function runTraceroute() {
+  const h = document.getElementById('tracert-host').value.trim();
+  if (!h) return;
+  runTool('tracert-output', '/api/tools/traceroute', {host: h});
+}
+function runDNS() {
+  const h = document.getElementById('dns-host').value.trim();
+  if (!h) return;
+  runTool('dns-output', '/api/tools/nslookup', {host: h});
+}
+function runWhois() {
+  const h = document.getElementById('whois-host').value.trim();
+  if (!h) return;
+  runTool('whois-output', '/api/tools/whois', {host: h});
+}
+function runPortScan() {
+  const h = document.getElementById('scan-host').value.trim();
+  if (!h) return;
+  runTool('portscan-output', '/api/tools/portscan', {
+    host: h,
+    ports: document.getElementById('scan-ports').value.trim() || '1-1024'
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Logs tab
+// ──────────────────────────────────────────────────────────────────────────────
+let logLive = true;
+
+async function loadLogs() {
+  const lines = document.getElementById('log-lines-sel').value;
+  const filter = document.getElementById('log-filter').value.trim().toLowerCase();
+  try {
+    const d = await api(`/api/logs?lines=${lines}`);
+    document.getElementById('log-path').textContent = d.path || '';
+    let text = (d.lines||[]).join('');
+    if (filter) text = text.split('\n').filter(l => l.toLowerCase().includes(filter)).join('\n');
+    const box = document.getElementById('log-output');
+    box.textContent = text;
+    box.scrollTop = box.scrollHeight;
+  } catch(e) {
+    document.getElementById('log-output').textContent = 'Error: ' + e.message;
+  }
+}
+
+function toggleLogLive() {
+  logLive = !logLive;
+  document.getElementById('log-live-txt').textContent = logLive ? 'Pause' : 'Resume';
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Sidebar collapse
+// ──────────────────────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  sb.classList.toggle('collapsed');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Theme toggle
+// ──────────────────────────────────────────────────────────────────────────────
+let _theme = localStorage.getItem('ids_theme') || 'dark';
+(function _initTheme(){
+  if (_theme === 'light') {
+    document.body.classList.add('theme-light');
+    document.getElementById('theme-btn').textContent = '☀ Light';
+  }
+})();
+
+function _chartColors(light) {
+  const txt = light ? '#6b7280' : '#9ca3af';
+  const grid = light ? 'rgba(0,0,0,.07)' : 'rgba(255,255,255,.04)';
+  [sparkChart, protoChart].forEach(ch => {
+    Object.values(ch.options.scales).forEach(sc => {
+      if (sc.ticks) sc.ticks.color = txt;
+      if (sc.grid)  sc.grid.color  = grid;
+    });
+    ch.update('none');
+  });
+  if (timelineChart) {
+    Object.values(timelineChart.options.scales).forEach(sc => {
+      if (sc.ticks) sc.ticks.color = txt;
+      if (sc.grid)  sc.grid.color  = grid;
+    });
+    timelineChart.update('none');
+  }
+}
+
+function toggleTheme() {
+  _theme = _theme === 'dark' ? 'light' : 'dark';
+  document.body.classList.toggle('theme-light', _theme === 'light');
+  document.getElementById('theme-btn').textContent = _theme === 'dark' ? '☽ Dark' : '☀ Light';
+  localStorage.setItem('ids_theme', _theme);
+  _chartColors(_theme === 'light');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Traffic bars (down-detector style) — updates with Overview data
+// ──────────────────────────────────────────────────────────────────────────────
+function updateTrafficBars(stats) {
+  const bars = [
+    {label:'TCP', val: stats.tcp||0, color:'#3b82f6'},
+    {label:'UDP', val: stats.udp||0, color:'#10b981'},
+    {label:'ICMP',val: stats.icmp||0, color:'#8b5cf6'},
+    {label:'Other',val: stats.other||0, color:'#6b7280'},
+  ];
+  const total = bars.reduce((s,b) => s+b.val, 0) || 1;
+  const el = document.getElementById('traffic-bars-body');
+  if (!el) return;
+  el.innerHTML = bars.map(b => {
+    const pct = Math.min(100, (b.val/total*100)).toFixed(1);
+    return `<div class="tbar-row">
+      <div class="tbar-label">${b.label}</div>
+      <div class="tbar-track"><div class="tbar-fill" style="width:${pct}%;background:${b.color}"></div></div>
+      <div class="tbar-val">${b.val.toLocaleString()} <span class="text-muted">(${pct}%)</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Refresh loops
+// ──────────────────────────────────────────────────────────────────────────────
+refreshOverview();
+setInterval(refreshOverview, 2000);
+
+setInterval(() => {
+  if (activeTab === 'packets' && packetLive) loadPackets();
+  if (activeTab === 'connections') loadConnections();
+  if (activeTab === 'firewall') loadFirewallTab();
+  if (activeTab === 'logs' && logLive) loadLogs();
+  if (activeTab === 'ip_analysis' && document.getElementById('ip-live-view').style.display !== 'none') loadIPLive();
+}, 3000);
+</script>
+</body>
+</html>

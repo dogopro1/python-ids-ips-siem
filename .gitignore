@@ -1,0 +1,49 @@
+# ── Virtual environment ───────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Python cache ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Database – zawiera przechwycone dane sieciowe i prywatne IP ───
+data/ids.db
+data/ids.db-shm
+data/ids.db-wal
+# (data/.gitkeep zostaje – zachowuje folder w repo)
+
+# ── Logi – zawierają rzeczywiste adresy IP z ruchu sieciowego ─────
+logs/system.log
+# (logs/.gitkeep zostaje – zachowuje folder w repo)
+
+# ── Zmienne środowiskowe i sekrety ───────────────────────────────
+.env
+.env.*
+secrets.yaml
+
+# ── IDE / edytory ─────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Pytest / coverage ─────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Tymczasowe ────────────────────────────────────────────────────
+*.tmp
+*.bak
+scraped_*/
