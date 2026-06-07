@@ -21,8 +21,15 @@ data/ids.db-wal
 # (data/.gitkeep zostaje – zachowuje folder w repo)
 
 # ── Logi – zawierają rzeczywiste adresy IP z ruchu sieciowego ─────
-logs/system.log
+logs/*.log
 # (logs/.gitkeep zostaje – zachowuje folder w repo)
+
+# ── Wygenerowane certyfikaty proxy (zawierają klucze prywatne) ────
+data/proxy/
+# (data/.gitkeep zostaje)
+
+# ── Eksporty PCAP (mogą zawierać przechwycony ruch prywatny) ──────
+data/pcap/
 
 # ── Zmienne środowiskowe i sekrety ───────────────────────────────
 .env

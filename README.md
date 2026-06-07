@@ -1,458 +1,389 @@
-# Python IDS/IPS SIEM – Real-Time Network Security Console
+# IDS/IPS Security Console
 
-![Dashboard Overview](docs/screenshot.png)
-
-Profesjonalny system wykrywania i zapobiegania włamaniom (IDS/IPS) z zaawansowaną konsolą webową SIEM. Napisany w Pythonie, działający na systemach Windows, Linux i macOS.
-
----
-
-## Spis treści
-
-1. [Wymagania](#wymagania)
-2. [Instalacja](#instalacja)
-3. [Uruchomienie](#uruchomienie)
-4. [Struktura projektu](#struktura-projektu)
-5. [Konfiguracja](#konfiguracja)
-6. [Funkcje systemu](#funkcje-systemu)
-7. [Opis zakładek dashboardu](#opis-zakładek-dashboardu)
-8. [API REST](#api-rest)
-9. [Silnik reguł IDS](#silnik-reguł-ids)
-10. [Baza danych SQLite](#baza-danych-sqlite)
-11. [Tryb zdegradowany](#tryb-zdegradowany)
-12. [Uruchamianie testów](#uruchamianie-testów)
-13. [Bezpieczeństwo](#bezpieczeństwo)
+Kompletna platforma bezpieczeństwa sieciowego uruchamiana lokalnie.  
+Zastępuje: **BurpSuite** (proxy + vuln scanner) · **Wireshark** (DPI, PCAP) · **Nmap** (scanner) · **WHOIS/RDAP** · **Threat Intelligence** · **Domowy IDS/IPS**.
 
 ---
 
-## Wymagania
-
-- Python 3.10+
-- System operacyjny: Windows 10/11, Linux (Debian/Ubuntu/Arch), macOS 12+
-- Uprawnienia administratora / root (wymagane do przechwytywania pakietów)
-- Npcap (Windows) lub libpcap (Linux/macOS)
-
----
-
-## Instalacja
+## Szybki start
 
 ```bash
-# 1. Sklonuj repozytorium
-git clone https://github.com/YOUR_USERNAME/python-ids-ips-siem.git ids-ips
-cd ids-ips/ids_ips_system
-
-# 2. Utwórz środowisko wirtualne
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# Linux / macOS
-source .venv/bin/activate
-
-# 3. Zainstaluj zależności (runtime + dev)
+# Wymagania: Python 3.10+, pip
+cd ids_ips_system
 pip install -r requirements.txt
-```
 
-### Windows – wymagany Npcap
-
-Pobierz i zainstaluj [Npcap](https://npcap.com/#download) przed uruchomieniem. Zaznacz opcję **"Install Npcap in WinPcap API-compatible Mode"**.
-
----
-
-## Uruchomienie
-
-```bash
-# Windows (PowerShell jako Administrator)
+# Windows — uruchom jako Administrator (wymagane do packet capture i IPS)
 python main.py
 
 # Linux / macOS
 sudo python main.py
 ```
 
-Po uruchomieniu dashboard dostępny jest pod adresem: **http://127.0.0.1:5000**
+Dashboard dostępny pod: **http://127.0.0.1:5000**  
+Proxy HTTP/HTTPS: **127.0.0.1:8080**
 
 ---
 
-## Struktura projektu
+## Architektura
 
 ```
 ids_ips_system/
-├── main.py                    # Punkt wejścia aplikacji
-├── requirements.txt           # Zależności (runtime + pytest)
-├── config/
-│   └── config.yaml            # Konfiguracja systemu
-├── core/
-│   ├── ids.py                 # Silnik IDS – worker thread
-│   ├── ips.py                 # Silnik IPS – blokowanie IP
-│   ├── rules.py               # Silnik reguł (6 typów detekcji)
+├── main.py                    # Entry point — startuje wszystkie komponenty
+├── config/config.yaml         # Jedyne źródło konfiguracji
+├── core/                      # Silnik IDS/IPS
+│   ├── ids.py                 # Worker thread — analiza pakietów
+│   ├── ips.py                 # Blokowanie IP (netsh/iptables/pfctl)
+│   ├── rules.py               # 6 reguł detekcji (sliding window)
 │   ├── connection_tracker.py  # Śledzenie aktywnych połączeń
-│   └── traffic_series.py      # Dane czasowe ruchu (sparkline)
-├── sniffer/
-│   └── packet_sniffer.py      # Przechwytywanie pakietów (Scapy)
-├── db/
-│   └── database.py            # SQLite – singleton WAL, 8 tabel
-├── utils/
-│   ├── config_loader.py       # Ładowanie i walidacja config.yaml
-│   ├── logger.py              # Logger z poziomami ALERT i BLOCKED + routing Werkzeug do pliku
-│   ├── platform_utils.py      # Blokowanie IP (netsh/iptables/pfctl)
-│   ├── dns_resolver.py        # Asynchroniczny resolver DNS z cache
-│   ├── geo_lookup.py          # Geolokalizacja IP (ip-api.com)
-│   ├── service_detector.py    # Mapowanie portów na nazwy usług
-│   ├── net_tools.py           # Ping, traceroute, nslookup, whois, port scan
-│   └── scanner.py             # Skaner WWW: TLS, nagłówki, tech detection, crawl, scrape
+│   └── traffic_series.py      # Szeregi czasowe ruchu (wykresy)
+├── sniffer/packet_sniffer.py  # Scapy sniffer (graceful degradation)
+├── db/database.py             # SQLite singleton (WAL, batch writes)
 ├── web/
-│   ├── app.py                 # Flask API – 36+ endpoints
-│   └── templates/
-│       └── dashboard.html     # Konsola webowa (10 zakładek)
-├── logs/
-│   └── system.log             # Logi systemu
-├── data/
-│   └── ids.db                 # Baza SQLite (tworzona automatycznie)
-└── tests/
-    ├── conftest.py
-    └── test_rules.py          # 11 testów jednostkowych
+│   ├── app.py                 # Flask API (70+ endpointów)
+│   └── templates/dashboard.html  # 15-zakładkowy dashboard
+├── proxy/                     # MODUŁ 1: Intercepting Proxy
+├── dpi/                       # MODUŁ 2: Deep Packet Inspection
+├── intel/                     # MODUŁ 3: Threat Intelligence
+├── network/                   # MODUŁ 5: Home Network Monitor
+├── vuln/                      # MODUŁ 6: Vulnerability Scanner
+└── utils/                     # Narzędzia (net_tools, scanner, dns...)
 ```
 
 ---
 
-## Konfiguracja
+## Moduły
 
-Plik `config/config.yaml`:
+### Moduł 1 — Intercepting HTTP/HTTPS Proxy *(zastępuje BurpSuite)*
+
+**Co robi:**  
+Przechwytuje cały ruch HTTP i HTTPS w czasie rzeczywistym. Dla HTTPS generuje certyfikaty SSL podpisane własnym CA i wykonuje SSL MITM (Man-in-the-Middle), więc widzisz odszyfrowany ruch.
+
+**Jak używać:**
+
+1. Uruchom system: `python main.py`
+2. Przejdź do zakładki **HTTP Proxy** w dashboardzie
+3. Kliknij **Start Proxy** — proxy nasłuchuje na `127.0.0.1:8080`
+4. Pobierz certyfikat CA: kliknij **Download CA.crt**
+5. Zaimportuj CA do przeglądarki:
+   - **Chrome/Edge:** Ustawienia → Prywatność → Certyfikaty → Importuj (zaufane CA)
+   - **Firefox:** Opcje → Prywatność → Certyfikaty → Importuj
+6. W przeglądarce ustaw proxy HTTP na `127.0.0.1:8080`
+7. Przeglądaj sieć — wszystkie requesty pojawiają się w tabeli
+
+**Funkcje:**
+- Historia requestów i response (host, metoda, status, body)
+- **Repeater**: kliknij "Replay" przy dowolnym requeście — modyfikuj i wyślij ponownie
+- Filtrowanie po hoście i metodzie HTTP
+- Przycisk "Detail" — pełny podgląd nagłówków i body request/response
+
+**Konfiguracja** (config.yaml):
+```yaml
+proxy_enabled: true
+proxy_host: "127.0.0.1"
+proxy_port: 8080
+proxy_ca_dir: "data/proxy"    # tutaj zapisywane są certyfikaty
+```
+
+---
+
+### Moduł 2 — Deep Packet Inspection + Wireshark-like *(zastępuje Wireshark)*
+
+**Co robi:**  
+Analizuje pakiety sieciowe na poziomie protokołów: Ethernet, IP, TCP, UDP, ICMP, HTTP, DNS, TLS, ARP, DHCP. Rekonstruuje strumienie TCP (Follow Stream). Eksportuje/importuje pliki PCAP kompatybilne z Wiresharkiem.
+
+**Zakładka: DPI Inspector**
+
+**PCAP Export:**
+1. Wpisz liczbę pakietów do wyeksportowania (np. 1000)
+2. Opcjonalnie podaj nazwę pliku (`mojapcap.pcap`)
+3. Kliknij **Export PCAP** — plik zapisuje się w `data/pcap/`
+4. Otwórz plik w Wireshark — wszystkie pakiety są widoczne
+
+**PCAP Import:**
+1. Wpisz pełną ścieżkę do pliku `.pcap`
+2. Kliknij **Import PCAP** — pakiety trafiają do bazy danych
+
+**Follow TCP Stream:**
+- Tabela "TCP Stream Reassembly" pokazuje aktywne strumienie TCP
+- Kliknij w wiersz aby zobaczyć pełną komunikację client↔server
+- Kolorystyka: zielony = client→server, niebieski = server→client
+
+**Protokoły analizowane automatycznie:**
+- `HTTP` — metoda, ścieżka, nagłówki, body
+- `DNS` — zapytania, odpowiedzi, typy rekordów
+- `TLS` — typ handshake (ClientHello, ServerHello, Certificate)
+- `ARP` — who-has, is-at, wykrywanie gratuitous ARP
+
+---
+
+### Moduł 3 — Threat Intelligence + RDAP/BGP *(rozszerzony WHOIS)*
+
+**Co robi:**  
+Sprawdza reputację IP, domeny lub hasha pliku w zewnętrznych bazach zagrożeń. Używa RDAP (nowoczesne REST API zastępujące WHOIS). Sprawdza informacje BGP/ASN z RIPE NCC.
+
+**Zakładka: Threat Intel**
+
+**Konfiguracja API (wymagana dla pełnej funkcjonalności):**
+```yaml
+# config.yaml
+virustotal_api_key: "twój_klucz"    # virustotal.com — darmowe konto
+abuseipdb_api_key: "twój_klucz"     # abuseipdb.com — darmowe konto
+shodan_api_key: "twój_klucz"        # shodan.io — darmowe konto
+```
+
+**Jak używać:**
+1. W zakładce **Threat Intel** wpisz IP, domenę lub hash pliku
+2. Wybierz typ zapytania:
+   - **IP Address** → sprawdza VirusTotal + AbuseIPDB + Shodan jednocześnie
+   - **Domain** → sprawdza VirusTotal (reputacja, kategorie, malicious count)
+   - **File Hash** → MD5/SHA1/SHA256, wyniki skanowania w 70+ silnikach AV
+   - **RDAP Lookup** → pełne dane rejestracyjne (IP lub domena) — bez klucza
+   - **BGP/ASN Lookup** → prefix BGP, holder AS, trasy — bez klucza
+3. Kliknij **Query All Sources**
+
+**Wyniki:**
+- VirusTotal: liczba silników wykrywających malicious/suspicious/harmless
+- AbuseIPDB: procent confidence (>80% = bardzo podejrzane), liczba zgłoszeń
+- Shodan: otwarte porty, CVE, banery usług, lokalizacja
+- RDAP: registrar, daty rejestracji, nameservery, kontakty
+- BGP: ASN, holder, prefiks IP
+
+**Wyniki są cache'owane** (domyślnie 1h) w SQLite — kolejne zapytania o ten sam cel są natychmiastowe.
+
+---
+
+### Moduł 4 — Nmap-like Scanner *(zastępuje Nmap)*
+
+**Co robi:**  
+Skanowanie portów TCP i UDP z banner grabbing (identyfikacja usług i wersji), OS fingerprinting (TTL + TCP window), ARP scan sieci lokalnej. Timing presets jak w Nmap (-T1 do -T5).
+
+**Zakładka: Net Tools** (rozszerzona)
+
+**Port Scanner TCP:**
+```
+Host: 192.168.1.1
+Ports: 1-1024  (lub: 22,80,443,8080)
+Timing: T3 Normal (domyślnie)
+Banner: ✓ (czyta pierwsze 512 bajtów z otwartego portu)
+OS Detect: □ (TTL + TCP window fingerprinting)
+```
+
+**Banner Grab:**
+- Wpisz host + port + opcjonalnie SSL
+- Zwraca pierwsze bajty odpowiedzi usługi
+- Automatycznie parsuje wersję (SSH-2.0-OpenSSH_9.2, nginx/1.24, Apache/2.4...)
+
+**OS Fingerprint:**
+- Wysyła ping i mierzy TTL:
+  - TTL ≤ 64 → Linux/Android/macOS
+  - TTL ≤ 128 → Windows
+  - TTL ≤ 255 → Cisco/urządzenie sieciowe
+- Sprawdza TCP window size dla pewniejszego wyniku
+
+**UDP Scan:**
+```
+Host: 192.168.1.1
+Ports: 53,67,123,161,500,1900
+```
+Wysyła specyficzne proby dla każdego protokołu (DNS query, NTP request, SNMP, SSDP).
+
+**ARP Scan (tylko sieć lokalna):**
+```
+Subnet: 192.168.1.0/24  (auto-detect jeśli puste)
+```
+Wykrywa wszystkie żywe hosty w podsieci, zwraca IP + MAC + vendor.
+
+**Timing presets:**
+| Preset | connect_timeout | Wątki | Zastosowanie |
+|--------|----------------|-------|--------------|
+| T1 Sneaky | 2.0s | 20 | IDS evasion |
+| T2 Polite | 1.5s | 50 | Delikatny |
+| T3 Normal | 0.5s | 150 | Domyślny |
+| T4 Aggressive | 0.3s | 300 | Szybki |
+| T5 Insane | 0.1s | 500 | Maksymalny |
+
+---
+
+### Moduł 5 — Home Network Monitor *(lokalny IDS/IPS sieci domowej)*
+
+**Co robi:**  
+Monitoruje sieć domową: wykrywa ARP spoofing, mapuje urządzenia, śledzi zużycie pasma per device, identyfikuje producenta urządzenia po MAC OUI.
+
+**Zakładka: Home Network**
+
+**Network Devices:**
+- Kliknij **Scan Network** — uruchamia ARP scan całej podsieci
+- Tabela pokazuje: IP, MAC, vendor (TP-Link, Raspberry Pi, Apple...), hostname (PTR DNS), status
+- Kliknij IP urządzenia → automatycznie przełącza do Threat Intel z tym IP
+
+**ARP Spoof Detection:**
+- Działa w tle od startu systemu (wymaga uprawnień root/admin)
+- Monitoruje wszystkie pakiety ARP
+- Alert gdy:
+  - Znane IP zmienia MAC address → podejrzenie ARP poisoning
+  - Wykryto gratuitous ARP (ARP reply bez zapytania) → typowa technika ataku MITM
+- Alerty w tabeli "ARP Spoof Events" i w logach systemowych
+
+**Bandwidth Monitor:**
+- Tabela "Top Talkers" — kto zużywa najwięcej pasma
+- Kolumny: IP, prędkość (KB/s), łączny transfer (MB), liczba pakietów
+
+**Konfiguracja:**
+```yaml
+home_network: "auto"              # lub np. "192.168.0.0/24"
+arp_monitor_enabled: true
+network_map_interval: 300         # rescan co 5 minut
+bandwidth_monitor_enabled: true
+```
+
+---
+
+### Moduł 6 — Web Vulnerability Scanner *(zastępuje BurpSuite Scanner)*
+
+**Co robi:**  
+Automatyczny skaner podatności webowych. Testuje parametry GET i POST na SQL injection, XSS, LFI, open redirect. Sprawdza security headers, flagi cookie, tokeny CSRF. Wykonuje directory bruteforce na 200 popularnych ścieżkach.
+
+**Zakładka: Vuln Scanner**
+
+**Jak używać:**
+1. Wpisz URL celu (np. `https://testphp.vulnweb.com`)
+2. Zaznacz które testy chcesz przeprowadzić
+3. Kliknij **Full Scan**
+4. Poczekaj 30-90 sekund
+
+**Testy:**
+
+| Check | Co testuje |
+|-------|-----------|
+| Security Headers | Brakujące HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
+| SQL Injection | 15 payloadów w parametrach GET; wykrywa odpowiedzi z błędami SQL |
+| XSS Reflected | 10 payloadów XSS; sprawdza czy payload pojawia się w response |
+| LFI / Path Traversal | 13 payloadów `../etc/passwd`, `..\\win.ini`; szuka sygnatur pliku |
+| Open Redirect | Parametry redirect/url/next/goto testowane payloadami `//evil.com` |
+| CSRF | Szuka formularzy POST bez tokenów CSRF |
+| Dir Bruteforce | 200 popularnych ścieżek: admin, .env, .git, phpinfo.php, wp-admin, actuator... |
+
+**Risk Score:**
+- CRITICAL: 40 pkt / znalezisko
+- HIGH: 20 pkt / znalezisko  
+- MEDIUM: 8 pkt / znalezisko
+- LOW: 2 pkt / znalezisko
+
+**Historia skanów** zachowywana w bazie SQLite.
+
+> ⚠️ **WAŻNE:** Używaj wyłącznie na systemach, do których masz autoryzację.
+
+---
+
+## Zakładki dashboardu
+
+| # | Zakładka | Opis |
+|---|----------|------|
+| 1 | Overview | Podgląd real-time: pakiety, alerty, połączenia, wykresy |
+| 2 | Packets | Tabela pakietów z filtrami protokołu/IP/portu |
+| 3 | Alerts | Alerty IDS z filtrowaniem i eksportem CSV |
+| 4 | Connections | Aktywne połączenia TCP/UDP, top talkers |
+| 5 | IP Analysis | Kliknij dowolne IP → geo, DNS, historia, blokowanie |
+| 6 | Domain Scan | TLS/cert, security headers, tech fingerprint, crawler |
+| 7 | Statistics | Wykresy, top ports/sources, timeline 24h |
+| 8 | Firewall | Blokowanie/odblokowanie IP, whitelist, blacklist |
+| 9 | Net Tools | Ping, traceroute, DNS, WHOIS, port scan, UDP scan, banner, OS detect, ARP scan |
+| 10 | Logs | Podgląd logów z filtrowaniem |
+| 11 | **HTTP Proxy** | Intercepting proxy, historia requestów, Repeater |
+| 12 | **DPI Inspector** | TCP streams (Follow Stream), PCAP export/import |
+| 13 | **Threat Intel** | VirusTotal, AbuseIPDB, Shodan, RDAP, BGP |
+| 14 | **Vuln Scanner** | SQLi, XSS, LFI, CSRF, Dir Bruteforce, Headers audit |
+| 15 | **Home Network** | Devices map, ARP spoof detector, bandwidth monitor |
+
+---
+
+## Reguły detekcji IDS (6 reguł)
+
+| Reguła | Opis | Severity |
+|--------|------|----------|
+| BLACKLIST | Pakiet z IP na czarnej liście | HIGH |
+| DOS_FLOOD | >100 pakietów/10s z jednego IP | HIGH |
+| PORT_SCAN | >20 unikalnych portów/10s z jednego IP | MEDIUM |
+| SYN_FLOOD | >80 pakietów SYN bez ACK/10s | HIGH |
+| ICMP_FLOOD | >50 pakietów ICMP/10s | MEDIUM |
+| SUSPICIOUS_PORT | Połączenie na port 4444/5555/31337/12345 | LOW |
+
+Wszystkie reguły używają **sliding window** (nie bucket) — nie pomijają ataków na granicy okna czasowego.  
+**Rate limiter:** max 1 alert/30s dla tej samej pary (IP, typ reguły) — zapobiega flooding alertami.
+
+---
+
+## IPS — Automatyczne blokowanie
+
+Gdy IDS wykryje alert HIGH lub MEDIUM, IPS automatycznie blokuje źródłowe IP:
+- **Windows:** `netsh advfirewall firewall add rule`
+- **Linux:** `iptables -A INPUT -s {IP} -j DROP`
+- **macOS:** pfctl anchor
+
+IP z **whitelist** nigdy nie jest blokowane.  
+Domyślnie blokada zdejmowana po 600 sekundach (konfigurowalne, 0 = permanentne).
+
+---
+
+## Konfiguracja API Keys
+
+Edytuj `config/config.yaml`:
 
 ```yaml
-# Interfejs sieciowy: "auto" (domyślny) lub np. "eth0", "Wi-Fi"
-interface: auto
+# Threat Intelligence (darmowe klucze)
+virustotal_api_key: ""    # https://www.virustotal.com/gui/join-us
+abuseipdb_api_key: ""     # https://www.abuseipdb.com/register
+shodan_api_key: ""        # https://account.shodan.io/register
 
-# Progi detekcji (pakiety / okno czasowe)
-dos_threshold: 100          # DoS flood: max pakietów na IP w oknie
-portscan_threshold: 20      # Skanowanie portów: unikalnych portów w oknie
-syn_flood_threshold: 80     # SYN flood: pakietów SYN bez ACK
-icmp_flood_threshold: 50    # ICMP flood: pakietów ICMP w oknie
-time_window: 10             # Okno czasowe w sekundach (1–3600)
+# Proxy
+proxy_enabled: true
+proxy_port: 8080
 
-# Listy
-blacklist:
-  - 10.0.0.1                # Zablokowane IP (stała lista w configu)
-suspicious_ports:
-  - 4444                    # Metasploit
-  - 5555
-  - 6666
-  - 31337                   # Elite / Back Orifice
-  - 12345
+# IDS/IPS
+dos_threshold: 100
+portscan_threshold: 20
+block_timeout: 600        # 0 = permanentne blokowanie
 
-# IPS (automatyczne blokowanie)
-ips_enabled: true
-block_timeout: 600          # Czas blokady w sekundach (0 = permanentnie)
-
-# Serwer webowy
-web_host: 127.0.0.1
-web_port: 5000
-
-# Logowanie
-log_file: logs/system.log
-log_level: INFO             # DEBUG, INFO, WARNING, ERROR
-
-# Bufor pakietów w pamięci
-packet_buffer_size: 1000
+# Sieć domowa
+home_network: "auto"      # lub np. "192.168.1.0/24"
+arp_monitor_enabled: true
 ```
 
 ---
 
-## Funkcje systemu
+## Wymagania
 
-### Detekcja zagrożeń (IDS)
-
-| Reguła | Typ | Severity | Opis |
-|--------|-----|----------|------|
-| BLACKLIST | Wykrywanie | HIGH | Pakiet z IP na czarnej liście |
-| DOS_FLOOD | Flood | HIGH | Zbyt wiele pakietów od jednego IP w oknie czasowym |
-| PORT_SCAN | Rekon | MEDIUM | Zbyt wiele unikalnych portów od jednego IP |
-| SYN_FLOOD | Flood | HIGH | Zbyt wiele pakietów SYN bez ACK |
-| ICMP_FLOOD | Flood | MEDIUM | Zbyt wiele pakietów ICMP |
-| SUSPICIOUS_PORT | Podejrzany port | LOW | Połączenie do portu z listy podejrzanych |
-
-Wszystkie reguły używają prawdziwego okna kroczącego (sliding window), nie bucket-based. Alerty dla tej samej pary (IP, typ) są ograniczone do 1 co 30 sekund (rate limiting).
-
-### Zapobieganie włamaniom (IPS)
-
-- Automatyczne blokowanie IP przy alertach HIGH i MEDIUM
-- Sprawdzanie whitelist przed każdym blokowaniem
-- Automatyczne odblokowanie po upływie `block_timeout` sekund
-- Blokowanie ręczne z poziomu dashboardu
-- Wsparcie dla netsh (Windows), iptables (Linux), pfctl (macOS)
-- Zapis historii blokad do bazy SQLite
-
-### Analiza sieci
-
-- **Geolokalizacja IP**: kraj, miasto, ISP, ASN (via ip-api.com, 45 req/min)
-- **Reverse DNS**: asynchroniczne rozwiązywanie z cache LRU (2000 wpisów, TTL 1h)
-- **Historia IP**: wszystkie pakiety, alerty, blokady z bazy danych
-- **Śledzenie połączeń**: aktywne połączenia z czasem trwania, pakietami, bajtami, stanem (ACTIVE/IDLE)
-
-### Skaner stron (Domain Scanner)
-
-- Analiza 8 nagłówków bezpieczeństwa HTTP (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, COOP)
-- Inspekcja certyfikatu TLS (wersja, CN, wystawca, ważność, szyfr)
-- Ocena ryzyka (risk_score: 0–100, punkty za brakujące nagłówki i HTTP)
-- Detekcja stosu technologicznego (React, Vue, Angular, WordPress, Nginx, PHP, ASP.NET i 20+ innych)
-- Anonimowy crawler z fałszywym User-Agent (do 20 podstron)
-- Scraper: zapis HTML strony + manifest.json (linki, obrazy, skrypty, arkusze CSS) na dysk; opcjonalnie pobiera assety (CSS/JS/obrazy)
-- Ekstrakcja linków z HTML
-- Pobieranie i wyświetlanie robots.txt
-- Historia skanów w bazie SQLite
-
-### Narzędzia sieciowe
-
-- **Ping**: wybieralna liczba pakietów (1–10), czytelny output
-- **Traceroute**: śledzenie trasy przez węzły sieci
-- **DNS Lookup**: wszystkie typy rekordów (A, AAAA, MX, TXT, NS, CNAME, SOA)
-- **WHOIS**: socket-based fallback gdy brak systemowego `whois`
-- **Port Scanner**: wielowątkowy skaner TCP (do 2000 portów, format `1-1024` lub `80,443,8080`), wykrywa nazwy usług
+- Python 3.10+
+- Windows: uruchom jako **Administrator** (packet capture + netsh)
+- Linux/macOS: uruchom jako **root** (packet capture + iptables/pfctl)
+- Biblioteki: `flask`, `scapy`, `pyyaml`, `dnspython`, `cryptography`, `requests`
 
 ---
 
-## Opis zakładek dashboardu
+## Baza danych
 
-> Dashboard posiada przełącznik ciemny/jasny motyw (topbar, wybór zapamiętywany w `localStorage`) oraz zwijany panel boczny (przycisk ☰). Responsywny – działa na ekranach od 600px szerokości.
+SQLite (`data/ids.db`) — 13 tabel:
 
-### 1. Overview
-
-Główny podgląd systemu w czasie rzeczywistym (odświeżanie co 2s):
-
-- **4 karty statystyk** (klikalne → przejście do odpowiedniej zakładki):
-  - Total Packets (→ Packets) – z prędkością pkt/s i liczbą 24h
-  - Alerts (→ Alerts) – z liczbą alertów w ostatnich 24h
-  - Blocked IPs (→ Firewall) – aktywne blokady i suma historyczna
-  - Active Connections (→ Connections) – podział TCP/UDP/ICMP
-- **Pasek stanu systemu**: IDS / IPS / Sniffer (running/down), pakiety 24h, alerty 24h, rozmiar bazy, znacznik czasu odświeżenia
-- **Wykres ruchu live** (bar chart) – ostatnie 60 sekund, tooltip z pkt/s
-- **Wykres Protocol Distribution** (poziome słupki) – TCP/UDP/ICMP/Other z liczbami i procentami udziału; mini-tabela poniżej z kolorowymi etykietami
-- **Słupki poziomu ruchu** (down-detector style) – procentowy udział każdego protokołu z liczbą pakietów
-- **Lista ostatnich alertów** z linkiem do IP Analysis
-- **Top talkers** (IP z największym ruchem)
-
-### 2. Packets
-
-Tabela przechwyconych pakietów z filtrowaniem i trybem live:
-
-- Filtrowanie po protokole, IP źródłowym, porcie docelowym
-- Tryb live (auto-odświeżanie co 3s) z możliwością pauzy
-- Kolumny: czas, źródło, cel, port, protokół, **flagi TCP** (SYN/ACK/FIN/RST/PSH/URG), rozmiar, usługa
-- Eksport całej tabeli do CSV (`↓ CSV`)
-
-### 3. Alerts
-
-Tabela alertów bezpieczeństwa:
-
-- Filtrowanie po severity (HIGH/MEDIUM/LOW) i tekście
-- Eksport do CSV
-- Szybkie blokowanie IP jednym kliknięciem
-
-### 4. Connections
-
-Tabela aktywnych i niedawnych połączeń:
-
-- Stan: ACTIVE / IDLE
-- Statystyki: czas trwania, liczba pakietów, bajty
-- Wykrywanie nazwy usługi (port → HTTP, HTTPS, SSH, RDP, itp.)
-- Szybkie blokowanie IP
-
-### 5. IP Analysis
-
-Dwa widoki w jednej zakładce:
-
-**Widok Live** (domyślny, Wireshark-style):
-- Tabela przechwyconych pakietów w czasie rzeczywistym (auto-odświeżanie co 3s, przycisk Pause/Resume)
-- Kolumny: Time / Source IP / Hostname / Destination / Port / Proto / TCP Flags (kolorowane: SYN=zielony, RST=czerwony) / Size / Service
-- Kliknięcie dowolnego adresu IP przełącza na widok szczegółowy
-
-**Widok szczegółowy IP** (po kliknięciu IP):
-- Przycisk **← Back to Live** powrót do tabeli
-- Geolokalizacja (kraj, miasto, ISP, ASN, region)
-- Reverse DNS / hostname
-- Status: czy zablokowany, czy na whitelist
-- Historia pakietów i alertów z bazy danych
-
-> Kliknięcie IP z dowolnej innej zakładki (Packets, Alerts, Connections, Overview, Statistics) automatycznie przełącza do IP Analysis i otwiera widok szczegółowy.
-
-### 6. Domain Scanner
-
-Skaner bezpieczeństwa stron www – trzy tryby:
-
-- **Scan** – pełna analiza: nagłówki HTTP, TLS, ocena ryzyka, linki, robots.txt
-- **Detect Tech** – detekcja stosu technologicznego (serwer, framework, CMS, CDN, analityki)
-- **Crawl** – anonimowy crawler z fałszywym UA, konfigurowalny limit podstron (1–20)
-- **Scrape** – pobiera całą stronę (HTML do 5 MB) i zapisuje na dysk w wybranym folderze; wyodrębnia wszystkie linki, obrazy, skrypty, arkusze CSS i zapisuje je w `manifest.json`; opcja "Download assets" pobiera pliki CSS/JS/img do podfolderu `assets/`; podaje statystyki (status, rozmiar, czas, liczba plików)
-- Historia skanów w tabeli
-
-### 7. Statistics
-
-Statystyki z bazy danych SQLite:
-
-- Sumy: pakiety, alerty, alerty 24h, zablokowane IP
-- Top źródłowe IP i docelowe porty
-- Breakdown typów alertów z severity i liczbą
-- Wykres słupkowy ruchu (24h, per godzina)
-
-### 8. Firewall
-
-Zarządzanie blokadami:
-
-- Ręczne blokowanie i odblokowanie IP (z powodem)
-- Tabela aktywnych blokad z wiekiem i przyciskiem odblokowania
-- Zarządzanie whitelist (dodawanie/usuwanie z notatką)
-- Zarządzanie czarną listą manualną
-- Pełna historia blokad (typ: auto/manual, status: Active/Expired)
-
-### 9. Network Tools
-
-Narzędzia diagnostyczne z czytelnym formatowaniem wyników:
-
-- **Ping** (z wyborem liczby pakietów) – pokazuje surowy output
-- **Traceroute** – pokazuje surowy output
-- **DNS Lookup** – rekordy pogrupowane po typie (A, AAAA, MX, TXT, NS, CNAME, SOA)
-- **WHOIS** – z socket-based fallbackiem
-- **Port Scanner** – wyniki: PORT / USŁUGA w formie tabeli ASCII, format `1-1024` lub `80,443,8080`
-
-### 10. Logs
-
-Przeglądarka logów systemowych (plik `logs/system.log`):
-
-- Wybór liczby ostatnich linii (100/200/500)
-- Filtrowanie po tekście
-- Tryb live (auto-odświeżanie co 3s)
-- Pokazuje **wszystko co widzi terminal**: zdarzenia IDS/IPS (ALERT, BLOCKED, INFO) oraz logi HTTP serwera Flask (każdy request `GET /api/... 200`)
-- Wpisy oznaczone poziomem: `[INFO]`, `[WARNING]`, `[ALERT]`, `[BLOCKED]`, `[ERROR]`
+| Tabela | Zawiera |
+|--------|---------|
+| packets | Przechwycone pakiety (max 100k) |
+| alerts | Alerty IDS |
+| blocked_ips | Historia blokowania |
+| whitelist | IP nigdy nie blokowane |
+| blacklist_manual | Ręczna czarna lista |
+| domain_scans | Historia skanów domen |
+| dns_cache | Cache reverse DNS |
+| ip_analysis_cache | Cache geo/ASN |
+| **proxy_requests** | Historia HTTP proxy |
+| **intel_cache** | Cache TI (VT/AbuseIPDB/Shodan) |
+| **arp_events** | Eventy ARP spoof |
+| **network_devices** | Mapa urządzeń sieciowych |
+| **vuln_scans** | Historia skanów podatności |
 
 ---
 
-## API REST
+## Eksport danych
 
-Wszystkie endpointy zwracają JSON (oprócz CSV exports).
-
-| Metoda | Ścieżka | Opis |
-|--------|---------|------|
-| GET | `/api/stats` | Statystyki IDS (pakiety, alerty, protokoły, uptime) |
-| GET | `/api/packets` | Ostatnie pakiety z sniffera (in-memory, z hostname) |
-| GET | `/api/db/packets` | Pakiety z bazy SQLite (filtr: protocol, src_ip, dst_ip, dst_port, from_ts, to_ts) |
-| GET | `/api/alerts` | Alerty (filtr: limit, severity, search, type, from_ts, to_ts) |
-| GET | `/api/blocked` | Aktualnie zablokowane IP |
-| GET | `/api/health` | Stan komponentów (sniffer, IDS, IPS, degraded) |
-| GET | `/api/traffic/series` | Dane sparkline (pakiety/s ostatnie 60s) |
-| GET | `/api/connections` | Aktywne połączenia (limit) |
-| GET | `/api/connections/top` | Top talkers (limit) |
-| GET | `/api/db/stats` | Podsumowanie bazy danych (pakiety, alerty, blokady 24h/total) |
-| GET | `/api/db/top_ports` | Top 10 docelowych portów |
-| GET | `/api/db/top_sources` | Top 10 źródłowych IP |
-| GET | `/api/db/alert_types` | Breakdown typów alertów z severity |
-| GET | `/api/db/timeline` | Ruch godzinowy `?hours=24` |
-| GET | `/api/ip/analyze?ip=X` | Pełna analiza IP (geo, DNS, historia, status blokady) |
-| GET | `/api/ip/history?ip=X` | Historia IP z bazy (pakiety, alerty, blokady) |
-| POST | `/api/scan/domain` | Skanowanie domeny `{"url": "..."}` |
-| POST | `/api/scan/tech` | Detekcja technologii `{"url": "..."}` |
-| POST | `/api/scan/crawl` | Crawler `{"url":"...", "max_pages":8, "fake_ua":true}` |
-| POST | `/api/scan/scrape` | Scraper `{"url":"...", "save_dir":"C:\\...", "include_assets":false}` |
-| GET | `/api/scan/history` | Historia skanów domen |
-| POST | `/api/tools/ping` | Ping `{"host":"...", "count":4}` |
-| POST | `/api/tools/traceroute` | Traceroute `{"host":"..."}` |
-| POST | `/api/tools/nslookup` | DNS Lookup (wszystkie typy) `{"host":"..."}` |
-| POST | `/api/tools/whois` | WHOIS `{"host":"..."}` |
-| POST | `/api/tools/portscan` | Port scan `{"host":"...", "ports":"1-1024"}` |
-| POST | `/api/firewall/block` | Blokuj IP `{"ip":"...", "reason":"..."}` |
-| POST | `/api/firewall/unblock` | Odblokuj IP `{"ip":"..."}` |
-| GET | `/api/firewall/blocked_history` | Historia blokad |
-| GET | `/api/whitelist` | Lista whitelist |
-| POST | `/api/whitelist` | Dodaj do whitelist `{"ip":"...", "note":"..."}` |
-| DELETE | `/api/whitelist` | Usuń z whitelist `{"ip":"..."}` |
-| GET | `/api/blacklist` | Manualna czarna lista |
-| POST | `/api/blacklist` | Dodaj do czarnej listy `{"ip":"...", "note":"..."}` |
-| DELETE | `/api/blacklist` | Usuń z czarnej listy `{"ip":"..."}` |
-| GET | `/api/logs` | Logi systemowe `?lines=200` |
-| GET | `/api/export/alerts.csv` | Eksport alertów jako CSV |
-| GET | `/api/export/packets.csv` | Eksport pakietów jako CSV `?limit=5000` |
-
----
-
-## Silnik reguł IDS
-
-Każdy pakiet przechodzi przez 6 reguł sprawdzanych w jednej blokadzie mutexu:
-
-1. **Blacklist** – natychmiastowa detekcja przy pierwszym pakiecie od zablokowanego IP
-2. **DoS Flood** – sliding window: jeśli liczba pakietów od IP w ciągu `time_window` sekund przekroczy `dos_threshold`, generuje alert HIGH
-3. **Port Scan** – sliding window: jeśli IP odpytał więcej niż `portscan_threshold` unikalnych portów w oknie, generuje alert MEDIUM
-4. **SYN Flood** – flaga SYN bez ACK (`flags & 0x02 and not flags & 0x10`): jeśli count > `syn_flood_threshold`, alert HIGH
-5. **ICMP Flood** – analogicznie dla ICMP > `icmp_flood_threshold`, alert MEDIUM
-6. **Suspicious Port** – sprawdzenie listy `suspicious_ports`, alert LOW
-
-**Rate limiting**: ten sam (IP, typ alertu) nie generuje kolejnego alertu przez 30 sekund.
-
-**Czyszczenie pamięci**: co 60 sekund usuwane są stare wpisy z counter-ów (IP nieaktywne przez 2× `time_window`).
-
----
-
-## Baza danych SQLite
-
-Baza `data/ids.db` (WAL mode, synchronous=NORMAL, cache 8MB):
-
-| Tabela | Opis |
-|--------|------|
-| `packets` | Przechwycone pakiety (max 100 000 rekordów, FIFO auto-prune) |
-| `alerts` | Historia alertów bezpieczeństwa |
-| `blocked_ips` | Historia blokad z flagą `active`, typem (auto/manual), timeoutem |
-| `whitelist` | IP zawsze chronione przed blokadą |
-| `blacklist_manual` | Ręcznie dodane IP do blokowania |
-| `domain_scans` | Wyniki skanowania domen (JSON) |
-| `dns_cache` | Cache reverse DNS (TTL 1h) |
-| `ip_analysis_cache` | Cache geolokalizacji (TTL 30min) |
-
-Pakiety są zapisywane wsadowo co 10 sekund (`queue_packet()` → `_flush_loop()`), co minimalizuje I/O i nie blokuje wątku sniffera.
-
----
-
-## Tryb zdegradowany
-
-System uruchomi się nawet bez uprawnień do przechwytywania pakietów:
-
-- Sniffer ustawia `degraded=True` zamiast się crashować
-- Dashboard wyświetla żółty banner ostrzegawczy
-- Wskaźnik LIVE zmienia kolor na czerwony
-- Wszystkie pozostałe funkcje działają normalnie: analiza IP, skaner domen, narzędzia sieciowe, logi, zarządzanie firewallem
-
----
-
-## Uruchamianie testów
-
-```bash
-cd ids_ips_system
-python -m pytest tests/ -v
-```
-
-11 testów jednostkowych silnika reguł:
-
-| Test | Co sprawdza |
-|------|-------------|
-| `test_dos_detection` | DoS flood powyżej progu → alert HIGH |
-| `test_portscan_detection` | Port scan powyżej progu → alert MEDIUM |
-| `test_portscan_sliding_window` | Stare wpisy poza oknem nie liczą się |
-| `test_blacklist_detection` | IP z blacklisty → natychmiastowy alert HIGH |
-| `test_syn_flood` | SYN bez ACK powyżej progu → alert HIGH |
-| `test_syn_with_ack_not_flagged` | SYN+ACK nie triggeruje SYN flood (false positive) |
-| `test_icmp_flood` | ICMP flood powyżej progu → alert MEDIUM |
-| `test_suspicious_port` | Port z listy podejrzanych → alert LOW |
-| `test_no_false_positive` | Normalny ruch TCP nie generuje alertów |
-| `test_rate_limiter` | Ten sam (IP, typ) → max 1 alert / 30s |
-| `test_rate_limiter_cleanup` | Stare wpisy rate limitera są czyszczone |
-
----
-
-## Bezpieczeństwo
-
-Dashboard jest przeznaczony do użytku lokalnego (`127.0.0.1`). Wbudowane zabezpieczenia:
-
-- Nagłówki HTTP: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store`, usunięty nagłówek `Server`
-- Escapowanie HTML w całym JavaScript (`esc()`) chroniące przed XSS
-- Walidacja adresów IP przez moduł `ipaddress` przed każdą operacją firewall/whitelist/blacklist
-- `yaml.safe_load()` przy ładowaniu konfiguracji
-- Walidacja konfiguracji przy starcie (fail-fast z czytelnymi błędami)
-
-> Nie wystawiaj dashboardu na sieć publiczną bez dodatkowego uwierzytelniania (np. nginx + Basic Auth lub VPN).
+- `/api/export/packets.csv` — wszystkie pakiety
+- `/api/export/alerts.csv` — wszystkie alerty
+- PCAP export w zakładce DPI Inspector (kompatybilny z Wireshark)
