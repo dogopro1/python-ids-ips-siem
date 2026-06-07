@@ -1,3 +1,4 @@
+# ── IDS/IPS core ──────────────────────────────────────────────────────────────
 interface: "auto"
 dos_threshold: 100
 portscan_threshold: 20
@@ -20,3 +21,37 @@ web_port: 5000
 log_file: "logs/system.log"
 log_level: "INFO"
 packet_buffer_size: 1000
+
+# ── Intercepting HTTP/HTTPS Proxy (Module 1) ───────────────────────────────────
+proxy_enabled: true
+proxy_host: "127.0.0.1"
+proxy_port: 8080
+proxy_ca_dir: "data/proxy"          # CA cert + per-host cert cache
+proxy_max_history: 5000             # max rows in proxy_requests table
+
+# ── Threat Intelligence APIs (Module 3) ───────────────────────────────────────
+virustotal_api_key: ""              # get free key at virustotal.com
+abuseipdb_api_key: ""              # get free key at abuseipdb.com
+shodan_api_key: ""                  # get free key at shodan.io
+intel_cache_ttl: 3600               # seconds to cache TI results
+
+# ── Enhanced Scanner — Nmap-like (Module 4) ───────────────────────────────────
+scan_banner_timeout: 2.0            # seconds to wait for service banner
+scan_max_ports: 10000               # hard cap on ports per scan
+scan_udp_timeout: 2.0
+scan_timing: 3                      # 1=sneaky 2=polite 3=normal 4=aggressive 5=insane
+
+# ── Home Network Monitor (Module 5) ───────────────────────────────────────────
+home_network: "auto"                # CIDR or "auto" to detect local subnet
+arp_monitor_enabled: true           # detect ARP spoofing
+network_map_interval: 300           # seconds between full network rescans
+dns_sinkhole_enabled: false         # enable local DNS sinkhole (port 5353)
+dns_sinkhole_blocklist_url: "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+bandwidth_monitor_enabled: true
+
+# ── Web Vulnerability Scanner (Module 6) ──────────────────────────────────────
+vuln_request_timeout: 10            # per-request timeout in seconds
+vuln_max_urls: 50                   # max URLs to test per scan
+vuln_dirbrute_wordlist: ""          # path to custom wordlist, empty = built-in 200 paths
+vuln_sqli_payloads: 15              # number of SQLi payloads to try
+vuln_xss_payloads: 10              # number of XSS payloads to try

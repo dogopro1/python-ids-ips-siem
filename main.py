@@ -27,13 +27,30 @@ _db: "Database" = None
 
 
 def _cleanup() -> None:
-    """Stop all components in reverse start order."""
     if _sniffer:
         _sniffer.stop()
     if _ids:
         _ids.stop()
     if _ips:
         _ips.stop()
+
+    # Stop new modules
+    try:
+        from proxy.intercepting_proxy import stop as proxy_stop
+        proxy_stop()
+    except Exception:
+        pass
+    try:
+        from network.arp_monitor import stop as arp_stop
+        arp_stop()
+    except Exception:
+        pass
+    try:
+        from network.network_mapper import stop as nm_stop
+        nm_stop()
+    except Exception:
+        pass
+
     if _db:
         _db.close()
     logger.info("Shutdown complete")
@@ -44,7 +61,6 @@ def main() -> None:
 
     config = Config.load()
 
-    # Resolve log file relative to project root regardless of working directory
     log_file: str = config["log_file"]
     if not os.path.isabs(log_file):
         log_file = os.path.join(_PROJECT_ROOT, log_file)
@@ -52,18 +68,14 @@ def main() -> None:
     setup_logger(log_file, config["log_level"])
 
     logger.info("=" * 60)
-    logger.info("IDS/IPS System starting  (Python %s)", sys.version.split()[0])
+    logger.info("IDS/IPS Security Console starting  (Python %s)", sys.version.split()[0])
     logger.info("Project root: %s", _PROJECT_ROOT)
     logger.info("=" * 60)
 
-    # Initialize database singleton early so all components share it
     _db = Database.get()
 
     conn_tracker = ConnectionTracker()
     traffic_series = TrafficSeries(window=60)
-
-    # Bounded queue: if IDS falls behind under a flood attack, packets are
-    # dropped with a warning rather than consuming all available RAM.
     packet_queue: Queue = Queue(maxsize=10_000)
 
     _ips = IPS(config)
@@ -76,8 +88,39 @@ def main() -> None:
 
     init_app(_sniffer, _ids, _ips, conn_tracker, traffic_series)
 
-    # SIGTERM (systemd, docker stop, kill): raise SystemExit in main thread
-    # so the finally block below runs clean shutdown.
+    # ── Module 1: Intercepting Proxy ──────────────────────────────────────────
+    if config.get("proxy_enabled", True):
+        try:
+            from proxy.intercepting_proxy import start as proxy_start
+            ca_dir = config.get("proxy_ca_dir", "data/proxy")
+            if not os.path.isabs(ca_dir):
+                ca_dir = os.path.join(_PROJECT_ROOT, ca_dir)
+            proxy_start(
+                host=config.get("proxy_host", "127.0.0.1"),
+                port=int(config.get("proxy_port", 8080)),
+                ca_dir=ca_dir,
+            )
+            logger.info("Proxy → http://%s:%d  (configure browser to use this proxy)",
+                        config.get("proxy_host", "127.0.0.1"),
+                        int(config.get("proxy_port", 8080)))
+        except Exception as e:
+            logger.warning("proxy: could not start — %s", e)
+
+    # ── Module 5: ARP Monitor ─────────────────────────────────────────────────
+    if config.get("arp_monitor_enabled", True):
+        try:
+            from network.arp_monitor import start as arp_start
+            arp_start()
+        except Exception as e:
+            logger.warning("arp_monitor: could not start — %s", e)
+
+    # ── Module 5: Network Mapper ──────────────────────────────────────────────
+    try:
+        from network.network_mapper import start as nm_start
+        nm_start(interval=int(config.get("network_map_interval", 300)))
+    except Exception as e:
+        logger.warning("network_mapper: could not start — %s", e)
+
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
 
@@ -90,7 +133,6 @@ def main() -> None:
     logger.info("Dashboard → http://%s:%s", host, port)
 
     try:
-        # threaded=True: Flask handles concurrent API requests from the dashboard
         app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
     except (KeyboardInterrupt, SystemExit):
         pass

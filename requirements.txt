@@ -1,8 +1,12 @@
-# Runtime
+# Runtime — core
 flask>=3.0
 scapy>=2.5
 pyyaml>=6.0
 dnspython>=2.4
+
+# Runtime — new modules
+cryptography>=42.0     # proxy: CA cert + per-host cert generation
+requests>=2.31         # intel + vuln scanner HTTP client
 
 # Development / tests
 pytest>=8.0

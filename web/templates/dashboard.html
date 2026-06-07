@@ -223,6 +223,23 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
     <span class="nav-icon">&#x1F4DC;</span><span>Logs</span>
   </div>
 
+  <div class="nav-section">Security Suite</div>
+  <div class="nav-item" data-tab="proxy">
+    <span class="nav-icon">&#x1F500;</span><span>HTTP Proxy</span>
+  </div>
+  <div class="nav-item" data-tab="dpi">
+    <span class="nav-icon">&#x1F52C;</span><span>DPI Inspector</span>
+  </div>
+  <div class="nav-item" data-tab="intel">
+    <span class="nav-icon">&#x1F575;</span><span>Threat Intel</span>
+  </div>
+  <div class="nav-item" data-tab="vuln">
+    <span class="nav-icon">&#x1F3AF;</span><span>Vuln Scanner</span>
+  </div>
+  <div class="nav-item" data-tab="network">
+    <span class="nav-icon">&#x1F3E0;</span><span>Home Network</span>
+  </div>
+
   <div class="sidebar-footer">
     <div><span class="status-dot pulse" id="sbar-dot"></span><span id="sbar-status">LIVE</span></div>
     <div style="margin-top:4px" id="sbar-uptime">--:--:--</div>
@@ -661,13 +678,61 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
       </div>
       <!-- Port Scan -->
       <div class="card">
-        <div class="card-title">Port Scanner</div>
+        <div class="card-title">Port Scanner (Nmap-like)</div>
         <div class="form-row">
           <input type="text" id="scan-host" placeholder="host or IP" style="flex:1">
-          <input type="text" id="scan-ports" placeholder="Ports: 1-1024 or 80,443,8080" style="flex:1;max-width:240px">
-          <button class="btn btn-blue" onclick="runPortScan()">Scan</button>
+          <input type="text" id="scan-ports" placeholder="1-1024 or 80,443,8080" style="flex:1;max-width:200px">
+          <select id="scan-timing" title="Timing (-T): 1=sneaky 3=normal 5=insane">
+            <option value="1">T1 Sneaky</option>
+            <option value="2">T2 Polite</option>
+            <option value="3" selected>T3 Normal</option>
+            <option value="4">T4 Aggressive</option>
+            <option value="5">T5 Insane</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="scan-banner" checked> Banner
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="scan-os"> OS Detect
+          </label>
+          <button class="btn btn-blue" onclick="runPortScan()">Scan TCP</button>
         </div>
         <div id="portscan-output" class="output-box" style="display:none"></div>
+      </div>
+      <div class="grid-2">
+        <!-- UDP Scan -->
+        <div class="card">
+          <div class="card-title">UDP Scanner</div>
+          <div class="form-row">
+            <input type="text" id="udp-host" placeholder="host or IP" style="flex:1">
+            <input type="text" id="udp-ports" placeholder="53,67,123,161,1900" style="flex:1">
+            <button class="btn btn-blue" onclick="runUDPScan()">Scan UDP</button>
+          </div>
+          <div id="udpscan-output" class="output-box" style="display:none"></div>
+        </div>
+        <!-- Banner Grab + OS Fingerprint -->
+        <div class="card">
+          <div class="card-title">Banner Grab + OS Fingerprint</div>
+          <div class="form-row">
+            <input type="text" id="banner-host" placeholder="host or IP" style="flex:1">
+            <input type="number" id="banner-port" placeholder="port" value="80" style="width:70px">
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="banner-ssl"> SSL
+            </label>
+            <button class="btn btn-blue" onclick="runBanner()">Grab</button>
+            <button class="btn btn-ghost" onclick="runOSFingerprint()">OS Detect</button>
+          </div>
+          <div id="banner-output" class="output-box" style="display:none"></div>
+        </div>
+        <!-- ARP Scan -->
+        <div class="card">
+          <div class="card-title">ARP Scan (Local Network)</div>
+          <div class="form-row">
+            <input type="text" id="arp-subnet" placeholder="192.168.1.0/24 (auto if empty)" style="flex:1">
+            <button class="btn btn-blue" onclick="runARPScan()">ARP Scan</button>
+          </div>
+          <div id="arpscan-output" class="output-box" style="display:none"></div>
+        </div>
       </div>
     </div>
 
@@ -686,6 +751,199 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
       <div class="card">
         <div class="card-title">System Log <span id="log-path" class="text-muted"></span></div>
         <div id="log-output" class="output-box" style="min-height:400px;color:var(--text)"></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: HTTP Proxy ──────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-proxy">
+      <div class="grid-4">
+        <div class="card">
+          <div class="card-title">Proxy Status</div>
+          <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+            <span class="status-dot" id="proxy-status-dot" style="background:var(--red)"></span>
+            <span id="proxy-status-label">Stopped</span>
+          </div>
+          <button class="btn btn-blue btn-sm" id="proxy-toggle-btn" onclick="toggleProxy()">Start Proxy</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Proxy Address</div>
+          <div class="card-value" style="font-size:18px">127.0.0.1:8080</div>
+          <div class="card-sub">Set in browser network settings</div>
+        </div>
+        <div class="card">
+          <div class="card-title">CA Certificate</div>
+          <div class="card-sub" style="margin-bottom:8px">Import into browser once</div>
+          <a href="/api/proxy/ca_cert" class="btn btn-ghost btn-sm" style="text-decoration:none">&#x2193; Download CA.crt</a>
+        </div>
+        <div class="card">
+          <div class="card-title">Quick Setup</div>
+          <div class="card-sub">1. Start proxy<br>2. Download CA.crt<br>3. Import CA into browser<br>4. Set proxy 127.0.0.1:8080</div>
+        </div>
+      </div>
+      <div class="form-row mb8">
+        <input type="text" id="proxy-host-filter" placeholder="Filter by host..." style="width:200px">
+        <select id="proxy-method-filter">
+          <option value="">All methods</option>
+          <option>GET</option><option>POST</option><option>PUT</option>
+          <option>DELETE</option><option>PATCH</option><option>OPTIONS</option>
+        </select>
+        <button class="btn btn-blue" onclick="loadProxyRequests()">Refresh</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Request History</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Method</th><th>Scheme</th><th>Host</th><th>Path</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="proxy-body">
+              <tr><td colspan="7" class="empty">No requests — configure browser proxy to 127.0.0.1:8080</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div id="proxy-detail"></div>
+    </div>
+
+    <!-- ── TAB: DPI Inspector ────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-dpi">
+      <div class="card mb8">
+        <div class="card-title">PCAP Export / Import</div>
+        <div class="form-row">
+          <input type="number" id="pcap-limit" value="1000" min="100" max="50000" style="width:90px" title="Max packets to export">
+          <input type="text" id="pcap-filename" placeholder="filename.pcap (optional)" style="width:200px">
+          <button class="btn btn-blue" onclick="exportPCAP()">Export PCAP</button>
+          <input type="text" id="pcap-import-path" placeholder="C:\path\to\file.pcap" style="width:280px">
+          <button class="btn btn-ghost" onclick="importPCAP()">Import PCAP</button>
+        </div>
+        <div id="pcap-result" style="margin-top:8px;font-size:13px"></div>
+      </div>
+      <div class="card">
+        <div class="flex-between mb8">
+          <div class="card-title" style="margin:0">TCP Stream Reassembly (Follow Stream)</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadDPIStreams()">&#x21BA; Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Source</th><th>Destination</th><th>State</th>
+              <th>Packets</th><th>Total</th><th>Client→Svr</th><th>Svr→Client</th><th>Duration</th>
+            </tr></thead>
+            <tbody id="dpi-streams-body">
+              <tr><td colspan="8" class="empty">No TCP streams — waiting for traffic</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div id="dpi-stream-detail"></div>
+    </div>
+
+    <!-- ── TAB: Threat Intel ─────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-intel">
+      <div class="card mb8">
+        <div class="card-title">Threat Intelligence Lookup</div>
+        <div class="form-row">
+          <input type="text" id="intel-target" placeholder="IP, domain, or file hash..." style="flex:1;max-width:320px">
+          <select id="intel-type">
+            <option value="ip">IP Address</option>
+            <option value="domain">Domain</option>
+            <option value="hash">File Hash (MD5/SHA256)</option>
+            <option value="rdap">RDAP Lookup</option>
+            <option value="bgp">BGP/ASN Lookup</option>
+          </select>
+          <button class="btn btn-blue" onclick="runIntelQuery()">Query All Sources</button>
+        </div>
+        <div class="card-sub mt8">Sources: VirusTotal · AbuseIPDB · Shodan · RDAP · BGP/RIPE — configure API keys in config.yaml</div>
+      </div>
+      <div id="intel-result"></div>
+    </div>
+
+    <!-- ── TAB: Vuln Scanner ─────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-vuln">
+      <div class="card mb8">
+        <div class="card-title">Web Vulnerability Scanner</div>
+        <div class="form-row">
+          <input type="text" id="vuln-url" placeholder="https://target.example.com" style="flex:1;max-width:400px">
+          <button class="btn btn-red" id="vuln-scan-btn" onclick="runVulnScan()">Full Scan</button>
+        </div>
+        <div class="form-row mt8" style="gap:12px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="headers" checked> Security Headers
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="sqli" checked> SQL Injection
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="xss" checked> XSS (Reflected)
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="lfi" checked> LFI / Path Traversal
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="open_redirect" checked> Open Redirect
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="csrf" checked> CSRF
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="dirbrute" checked> Dir Bruteforce
+          </label>
+        </div>
+        <div class="card-sub mt8 text-orange">Only test systems you own or have explicit permission to test.</div>
+      </div>
+      <div id="vuln-result"></div>
+      <div class="section-title">Scan History</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>#</th><th>URL</th><th>Risk Score</th><th>Findings</th><th>Scanned At</th></tr></thead>
+            <tbody id="vuln-history-body">
+              <tr><td colspan="5" class="empty">No scans yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: Home Network ─────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-network">
+      <div class="form-row mb8">
+        <input type="text" id="net-subnet" placeholder="192.168.1.0/24 (auto-detect if empty)" style="width:240px">
+        <button class="btn btn-blue" onclick="scanNetwork()">Scan Network</button>
+        <button class="btn btn-ghost" onclick="loadARPEvents()">Refresh ARP Events</button>
+        <button class="btn btn-ghost" onclick="loadBandwidth()">Bandwidth Stats</button>
+        <span id="net-scan-result" class="text-muted" style="font-size:13px"></span>
+      </div>
+      <div class="section-title">Network Devices</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Status</th><th>Last Seen</th></tr></thead>
+            <tbody id="net-devices-body">
+              <tr><td colspan="6" class="empty">No devices — click Scan Network</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section-title">ARP Spoof Events</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Type</th><th>IP</th><th>MAC Change</th><th>Flags</th></tr></thead>
+            <tbody id="arp-events-body">
+              <tr><td colspan="5" class="empty">No ARP events</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section-title">Bandwidth Monitor (Top Talkers)</div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>IP</th><th>Rate (KB/s)</th><th>Total</th><th>Packets</th></tr></thead>
+            <tbody id="bw-body">
+              <tr><td colspan="4" class="empty">No bandwidth data</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1619,10 +1877,42 @@ function runWhois() {
 function runPortScan() {
   const h = document.getElementById('scan-host').value.trim();
   if (!h) return;
+  const timing = parseInt(document.getElementById('scan-timing')?.value||'3');
+  const banner = document.getElementById('scan-banner')?.checked !== false;
+  const os_detect = document.getElementById('scan-os')?.checked === true;
   runTool('portscan-output', '/api/tools/portscan', {
     host: h,
-    ports: document.getElementById('scan-ports').value.trim() || '1-1024'
+    ports: document.getElementById('scan-ports').value.trim() || '1-1024',
+    timing, banner, os_detect,
   });
+}
+
+function runUDPScan() {
+  const h = document.getElementById('udp-host')?.value.trim();
+  if (!h) return;
+  runTool('udpscan-output', '/api/tools/udpscan', {
+    host: h,
+    ports: document.getElementById('udp-ports')?.value.trim() || '53,67,123,161,500,1900',
+  });
+}
+
+function runBanner() {
+  const h = document.getElementById('banner-host')?.value.trim();
+  const port = parseInt(document.getElementById('banner-port')?.value||'80');
+  const ssl = document.getElementById('banner-ssl')?.checked === true;
+  if (!h) return;
+  runTool('banner-output', '/api/tools/banner', {host: h, port, ssl});
+}
+
+function runOSFingerprint() {
+  const h = document.getElementById('banner-host')?.value.trim();
+  if (!h) return;
+  runTool('banner-output', '/api/tools/osfingerprint', {host: h});
+}
+
+function runARPScan() {
+  const subnet = document.getElementById('arp-subnet')?.value.trim()||null;
+  runTool('arpscan-output', '/api/tools/arpscan', {subnet});
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1732,7 +2022,388 @@ setInterval(() => {
   if (activeTab === 'firewall') loadFirewallTab();
   if (activeTab === 'logs' && logLive) loadLogs();
   if (activeTab === 'ip_analysis' && document.getElementById('ip-live-view').style.display !== 'none') loadIPLive();
+  if (activeTab === 'proxy') loadProxyRequests();
+  if (activeTab === 'dpi') loadDPIStreams();
+  if (activeTab === 'network') loadNetworkDevices();
 }, 3000);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODULE 1 — HTTP/HTTPS INTERCEPTING PROXY
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadProxyRequests() {
+  const host = document.getElementById('proxy-host-filter')?.value || '';
+  const method = document.getElementById('proxy-method-filter')?.value || '';
+  const r = await fetch(`/api/proxy/requests?limit=100&host=${encodeURIComponent(host)}&method=${encodeURIComponent(method)}`).catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('proxy-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No requests captured — configure browser proxy to 127.0.0.1:8080</td></tr>'; return; }
+  tbody.innerHTML = rows.map(row => {
+    const ts = new Date(row.timestamp*1000).toLocaleTimeString();
+    const sev = row.resp_status >= 500 ? 'text-red' : row.resp_status >= 400 ? 'text-orange' : row.resp_status >= 300 ? 'text-yellow' : 'text-green';
+    return `<tr>
+      <td>${ts}</td>
+      <td><span class="badge badge-blue">${esc(row.method)}</span></td>
+      <td><span class="badge ${row.scheme==='HTTPS'?'badge-green':'badge-yellow'}">${esc(row.scheme)}</span></td>
+      <td class="text-blue">${esc(row.host)}</td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(row.path)}</td>
+      <td class="${sev}">${row.resp_status||'—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="showProxyDetail(${row.id})">Detail</button>
+          <button class="btn btn-ghost btn-sm" onclick="proxyReplay(${row.id})">Replay</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function showProxyDetail(id) {
+  const r = await fetch(`/api/proxy/request/${id}`).catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const el = document.getElementById('proxy-detail');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">Request #${id} — ${esc(d.method)} ${esc(d.scheme)}://${esc(d.host)}${esc(d.path)}</div>
+      <div class="grid-2" style="gap:10px">
+        <div>
+          <div class="section-title" style="font-size:12px">REQUEST HEADERS</div>
+          <div class="output-box" style="max-height:200px">${esc(d.req_headers||'')}</div>
+          <div class="section-title" style="font-size:12px;margin-top:8px">REQUEST BODY</div>
+          <div class="output-box" style="max-height:150px">${esc(d.req_body||'(empty)')}</div>
+        </div>
+        <div>
+          <div class="section-title" style="font-size:12px">RESPONSE (${d.resp_status})</div>
+          <div class="output-box" style="max-height:200px">${esc(d.resp_headers||'')}</div>
+          <div class="section-title" style="font-size:12px;margin-top:8px">RESPONSE BODY</div>
+          <div class="output-box" style="max-height:150px">${esc(d.resp_body||'(empty)')}</div>
+        </div>
+      </div>
+      <div class="form-row mt8">
+        <button class="btn btn-ghost btn-sm" onclick="this.closest('.card').remove()">Close</button>
+        <button class="btn btn-blue btn-sm" onclick="proxyReplay(${id})">Replay Request</button>
+      </div>
+    </div>`;
+}
+
+async function proxyReplay(id) {
+  const el = document.getElementById('proxy-detail');
+  if (el) el.innerHTML = '<div class="card mt8"><div class="output-box"><span class="spinner"></span>Replaying…</div></div>';
+  const r = await fetch('/api/proxy/replay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})}).catch(()=>null);
+  if (!r?.ok) { if(el) el.innerHTML='<div class="card mt8"><div class="output-box error">Replay failed</div></div>'; return; }
+  const d = await r.json();
+  if (el) el.innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">Replay result — HTTP ${d.status} (${d.elapsed_ms}ms)</div>
+      <div class="output-box" style="max-height:300px">${esc(JSON.stringify(d.headers,null,2)+'\n\n'+d.body)}</div>
+      <button class="btn btn-ghost btn-sm mt8" onclick="this.closest('.card').remove()">Close</button>
+    </div>`;
+}
+
+async function toggleProxy() {
+  const btn = document.getElementById('proxy-toggle-btn');
+  if (btn) btn.disabled = true;
+  const r = await fetch('/api/proxy/toggle', {method:'POST'}).catch(()=>null);
+  if (btn) btn.disabled = false;
+  if (!r?.ok) return;
+  const d = await r.json();
+  updateProxyStatus(d.running);
+}
+
+function updateProxyStatus(running) {
+  const dot = document.getElementById('proxy-status-dot');
+  const label = document.getElementById('proxy-status-label');
+  const btn = document.getElementById('proxy-toggle-btn');
+  if (dot) dot.style.background = running ? 'var(--green)' : 'var(--red)';
+  if (label) label.textContent = running ? 'Running' : 'Stopped';
+  if (btn) btn.textContent = running ? 'Stop Proxy' : 'Start Proxy';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODULE 2 — DPI INSPECTOR
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadDPIStreams() {
+  const r = await fetch('/api/dpi/streams?limit=50').catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('dpi-streams-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No TCP streams yet</td></tr>'; return; }
+  tbody.innerHTML = rows.map(s => {
+    const dur = s.updated - s.created;
+    const stateColor = s.state==='FIN'||s.state==='RST' ? 'text-muted' : 'text-green';
+    return `<tr onclick="showDPIStream('${s.src_ip}','${s.dst_ip}',${s.src_port},${s.dst_port})" style="cursor:pointer">
+      <td><a class="ip-link">${esc(s.src_ip)}</a>:${s.src_port}</td>
+      <td><a class="ip-link">${esc(s.dst_ip)}</a>:${s.dst_port}</td>
+      <td class="${stateColor}">${s.state}</td>
+      <td>${s.packets}</td>
+      <td>${(s.bytes_total/1024).toFixed(1)} KB</td>
+      <td>${s.client_bytes}</td>
+      <td>${s.server_bytes}</td>
+      <td>${dur.toFixed(0)}s</td>
+    </tr>`;
+  }).join('');
+}
+
+async function showDPIStream(srcIp, dstIp, srcPort, dstPort) {
+  const r = await fetch(`/api/dpi/stream?src_ip=${srcIp}&dst_ip=${dstIp}&src_port=${srcPort}&dst_port=${dstPort}`).catch(()=>null);
+  if (!r?.ok) return;
+  const s = await r.json();
+  const el = document.getElementById('dpi-stream-detail');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">Stream: ${esc(srcIp)}:${srcPort} → ${esc(dstIp)}:${dstPort} [${s.state}]</div>
+      <div class="grid-2" style="gap:10px">
+        <div>
+          <div class="section-title" style="font-size:12px">CLIENT → SERVER (${s.client_bytes} bytes)</div>
+          <div class="output-box" style="max-height:300px;color:#86efac">${esc(s.client_payload||'(empty)')}</div>
+        </div>
+        <div>
+          <div class="section-title" style="font-size:12px">SERVER → CLIENT (${s.server_bytes} bytes)</div>
+          <div class="output-box" style="max-height:300px;color:#a5f3fc">${esc(s.server_payload||'(empty)')}</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm mt8" onclick="this.closest('.card').remove()">Close</button>
+    </div>`;
+}
+
+async function exportPCAP() {
+  const limit = parseInt(document.getElementById('pcap-limit')?.value||'1000');
+  const filename = document.getElementById('pcap-filename')?.value||'';
+  const el = document.getElementById('pcap-result');
+  if (el) el.innerHTML = '<span class="spinner"></span>Exporting…';
+  const r = await fetch('/api/dpi/pcap/export', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({limit, filename})}).catch(()=>null);
+  if (!r?.ok) { if(el) el.innerHTML='<span class="text-red">Export failed</span>'; return; }
+  const d = await r.json();
+  if (el) el.innerHTML = d.error ? `<span class="text-red">${esc(d.error)}</span>` : `<span class="text-green">Exported ${d.count} packets → ${esc(d.path)}</span>`;
+}
+
+async function importPCAP() {
+  const path = document.getElementById('pcap-import-path')?.value||'';
+  const el = document.getElementById('pcap-result');
+  if (!path) { if(el) el.innerHTML='<span class="text-red">Enter PCAP file path</span>'; return; }
+  if (el) el.innerHTML = '<span class="spinner"></span>Importing…';
+  const r = await fetch('/api/dpi/pcap/import', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path})}).catch(()=>null);
+  if (!r?.ok) { if(el) el.innerHTML='<span class="text-red">Import failed</span>'; return; }
+  const d = await r.json();
+  if (el) el.innerHTML = d.error ? `<span class="text-red">${esc(d.error)}</span>` : `<span class="text-green">Imported ${d.imported} packets (${d.errors} errors)</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODULE 3 — THREAT INTELLIGENCE
+// ═══════════════════════════════════════════════════════════════════════════════
+async function runIntelQuery() {
+  const target = document.getElementById('intel-target')?.value?.trim();
+  const type = document.getElementById('intel-type')?.value||'ip';
+  const el = document.getElementById('intel-result');
+  if (!target) return;
+  if (el) el.innerHTML = '<span class="spinner"></span>Querying threat intelligence…';
+
+  let endpoint = '/api/intel/ip';
+  let payload = {};
+  if (type === 'ip') { endpoint = '/api/intel/ip'; payload = {ip: target}; }
+  else if (type === 'domain') { endpoint = '/api/intel/domain'; payload = {domain: target}; }
+  else if (type === 'hash') { endpoint = '/api/intel/hash'; payload = {hash: target}; }
+  else if (type === 'rdap') { endpoint = '/api/intel/rdap'; payload = {target}; }
+  else if (type === 'bgp') { endpoint = '/api/intel/bgp'; payload = {ip: target}; }
+
+  const r = await fetch(endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).catch(()=>null);
+  if (!r?.ok) { if(el) el.innerHTML='<span class="text-red">Query failed</span>'; return; }
+  const d = await r.json();
+  if (el) el.innerHTML = `<div class="output-box" style="max-height:600px">${esc(JSON.stringify(d, null, 2))}</div>`;
+  renderIntelCards(d, target, type, el);
+}
+
+function renderIntelCards(data, target, type, container) {
+  let html = `<div class="section-title">Results for: ${esc(target)}</div>`;
+  const sources = Object.entries(data);
+  for (const [src, info] of sources) {
+    if (!info || info.error) {
+      html += `<div class="card mt8"><div class="card-title">${esc(src)}</div><span class="text-muted">${esc(info?.error||'No data')}</span></div>`;
+      continue;
+    }
+    html += `<div class="card mt8"><div class="card-title">${esc(src)}</div>`;
+    if (src==='virustotal') {
+      const mal = info.malicious||0;
+      const sus = info.suspicious||0;
+      html += `<div class="grid-4" style="margin-bottom:10px">
+        <div><div class="card-title">Malicious</div><div class="card-value text-red">${mal}</div></div>
+        <div><div class="card-title">Suspicious</div><div class="card-value text-orange">${sus}</div></div>
+        <div><div class="card-title">Harmless</div><div class="card-value text-green">${info.harmless||0}</div></div>
+        <div><div class="card-title">Reputation</div><div class="card-value">${info.reputation||0}</div></div>
+      </div>`;
+      if (info.country) html += `<div class="text-muted">Country: <span class="text-blue">${esc(info.country)}</span> | AS: ${esc(info.as_owner||'')}</div>`;
+      if (info.tags?.length) html += `<div class="mt8">${info.tags.map(t=>`<span class="badge badge-red">${esc(t)}</span>`).join(' ')}</div>`;
+    } else if (src==='abuseipdb') {
+      const conf = info.abuse_confidence||0;
+      const confColor = conf>80?'text-red':conf>40?'text-orange':'text-green';
+      html += `<div class="grid-4" style="margin-bottom:10px">
+        <div><div class="card-title">Abuse Score</div><div class="card-value ${confColor}">${conf}%</div></div>
+        <div><div class="card-title">Total Reports</div><div class="card-value">${info.total_reports||0}</div></div>
+        <div><div class="card-title">Distinct Users</div><div class="card-value">${info.distinct_users||0}</div></div>
+        <div><div class="card-title">Whitelisted</div><div class="card-value">${info.is_whitelisted?'Yes':'No'}</div></div>
+      </div>`;
+      html += `<div class="text-muted">ISP: ${esc(info.isp||'')} | Country: ${esc(info.country_code||'')} | Last: ${esc(info.last_reported||'—')}</div>`;
+    } else if (src==='shodan') {
+      html += `<div class="grid-3" style="margin-bottom:10px">
+        <div><div class="card-title">Open Ports</div><div class="card-value">${(info.open_ports||[]).length}</div></div>
+        <div><div class="card-title">Vulns</div><div class="card-value text-red">${(info.vulns||[]).length}</div></div>
+        <div><div class="card-title">OS</div><div class="card-value" style="font-size:16px">${esc(info.os||'—')}</div></div>
+      </div>`;
+      if (info.open_ports?.length) html += `<div class="text-muted mb8">Ports: ${info.open_ports.join(', ')}</div>`;
+      if (info.vulns?.length) html += `<div>${info.vulns.map(v=>`<span class="badge badge-red">${esc(v)}</span>`).join(' ')}</div>`;
+      if (info.services?.length) {
+        html += `<div class="tbl-wrap mt8"><table><thead><tr><th>Port</th><th>Service</th><th>Version</th><th>Banner</th></tr></thead><tbody>`;
+        for (const svc of info.services.slice(0,10)) {
+          html += `<tr><td>${svc.port}</td><td>${esc(svc.transport||'tcp')}</td><td>${esc(svc.product+' '+svc.version)}</td><td style="font-size:11px;max-width:200px;overflow:hidden">${esc((svc.banner||'').substring(0,80))}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+      }
+    } else {
+      html += `<div class="output-box" style="max-height:300px">${esc(JSON.stringify(info, null, 2))}</div>`;
+    }
+    html += '</div>';
+  }
+  if (container) container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODULE 6 — VULNERABILITY SCANNER
+// ═══════════════════════════════════════════════════════════════════════════════
+async function runVulnScan() {
+  const url = document.getElementById('vuln-url')?.value?.trim();
+  if (!url) return;
+  const checks = [...document.querySelectorAll('.vuln-check:checked')].map(el=>el.value);
+  const el = document.getElementById('vuln-result');
+  const btn = document.getElementById('vuln-scan-btn');
+  if (el) el.innerHTML = '<div class="card"><span class="spinner"></span> Scanning for vulnerabilities… this may take 30-60 seconds</div>';
+  if (btn) btn.disabled = true;
+  const r = await fetch('/api/vuln/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url, checks: checks.length ? checks : null})}).catch(()=>null);
+  if (btn) btn.disabled = false;
+  if (!r?.ok) { if(el) el.innerHTML='<div class="output-box error">Scan failed</div>'; return; }
+  const d = await r.json();
+  renderVulnReport(d, el);
+  loadVulnHistory();
+}
+
+function renderVulnReport(d, container) {
+  const sum = d.summary||{};
+  const scoreColor = d.risk_score>80?'text-red':d.risk_score>40?'text-orange':d.risk_score>10?'text-yellow':'text-green';
+  let html = `
+    <div class="grid-4" style="margin-bottom:12px">
+      <div class="card"><div class="card-title">Risk Score</div><div class="card-value ${scoreColor}">${d.risk_score||0}</div></div>
+      <div class="card"><div class="card-title">Critical</div><div class="card-value text-red">${sum.CRITICAL||0}</div></div>
+      <div class="card"><div class="card-title">High</div><div class="card-value text-orange">${sum.HIGH||0}</div></div>
+      <div class="card"><div class="card-title">Medium</div><div class="card-value text-yellow">${sum.MEDIUM||0}</div></div>
+    </div>`;
+  if (!d.findings?.length) {
+    html += '<div class="card"><div class="output-box text-green">No vulnerabilities found!</div></div>';
+  } else {
+    html += '<div class="card"><div class="card-title">Findings</div><div class="tbl-wrap"><table><thead><tr><th>Severity</th><th>Check</th><th>Type</th><th>Description</th></tr></thead><tbody>';
+    for (const f of d.findings) {
+      const sc = f.severity==='CRITICAL'?'sev-tag-high':f.severity==='HIGH'?'sev-tag-high':f.severity==='MEDIUM'?'sev-tag-medium':'sev-tag-low';
+      html += `<tr><td><span class="${sc}">${esc(f.severity)}</span></td><td>${esc(f.check)}</td><td>${esc(f.type)}</td><td>${esc(f.message)}</td></tr>`;
+    }
+    html += '</tbody></table></div></div>';
+  }
+  if (d.dirbrute?.findings?.length) {
+    html += `<div class="card mt8"><div class="card-title">Discovered Paths</div><div class="tbl-wrap"><table><thead><tr><th>Path</th><th>Status</th><th>Size</th></tr></thead><tbody>`;
+    for (const f of d.dirbrute.findings.slice(0,30)) {
+      const sc = f.status===200?'text-red':f.status===403?'text-orange':'text-yellow';
+      html += `<tr><td><a class="ip-link" href="${esc(f.url)}" target="_blank">${esc(f.path)}</a></td><td class="${sc}">${f.status}</td><td>${f.size}</td></tr>`;
+    }
+    html += '</tbody></table></div></div>';
+  }
+  if (container) container.innerHTML = html;
+}
+
+async function loadVulnHistory() {
+  const r = await fetch('/api/vuln/history').catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('vuln-history-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">No scans yet</td></tr>'; return; }
+  tbody.innerHTML = rows.map(row => {
+    const ts = new Date(row.scanned_at*1000).toLocaleString();
+    const sc = row.risk_score>80?'text-red':row.risk_score>40?'text-orange':row.risk_score>10?'text-yellow':'text-green';
+    return `<tr>
+      <td>${row.id}</td>
+      <td class="text-blue">${esc(row.url)}</td>
+      <td class="${sc}">${row.risk_score}</td>
+      <td>${row.findings_count}</td>
+      <td>${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODULE 5 — HOME NETWORK
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadNetworkDevices() {
+  const r = await fetch('/api/network/devices').catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('net-devices-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No devices — click Scan Network</td></tr>'; return; }
+  tbody.innerHTML = rows.map(d => {
+    const ts = d.last_seen ? new Date(d.last_seen*1000).toLocaleTimeString() : '—';
+    return `<tr>
+      <td><a class="ip-link" onclick="document.getElementById('intel-target').value='${esc(d.ip)}';switchTab('intel');runIntelQuery()">${esc(d.ip)}</a></td>
+      <td>${esc(d.mac||'')}</td>
+      <td>${esc(d.vendor||'')}</td>
+      <td>${esc(d.hostname||'')}</td>
+      <td><span class="badge badge-green">${esc(d.status||'up')}</span></td>
+      <td>${ts}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function scanNetwork() {
+  const subnet = document.getElementById('net-subnet')?.value?.trim()||null;
+  const el = document.getElementById('net-scan-result');
+  if (el) el.innerHTML = '<span class="spinner"></span>Scanning network… (ARP scan may take 5-15s)';
+  const r = await fetch('/api/network/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({subnet})}).catch(()=>null);
+  if (!r?.ok) { if(el) el.innerHTML='<span class="text-red">Scan failed</span>'; return; }
+  const d = await r.json();
+  if (el) el.innerHTML = `<span class="text-green">Found ${d.length||0} devices</span>`;
+  loadNetworkDevices();
+}
+
+async function loadARPEvents() {
+  const r = await fetch('/api/network/arp_events?limit=50').catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('arp-events-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">No ARP events</td></tr>'; return; }
+  tbody.innerHTML = rows.map(e => {
+    const ts = new Date(e.timestamp*1000).toLocaleTimeString();
+    return `<tr>
+      <td>${ts}</td>
+      <td class="text-red">${esc(e.type)}</td>
+      <td class="text-blue">${esc(e.ip)}</td>
+      <td>${esc(e.old_mac)} → ${esc(e.new_mac)}</td>
+      <td>${e.is_gratuitous ? '<span class="badge badge-red">Gratuitous</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadBandwidth() {
+  const r = await fetch('/api/network/bandwidth?limit=20').catch(()=>null);
+  if (!r?.ok) return;
+  const rows = await r.json();
+  const tbody = document.getElementById('bw-body');
+  if (!tbody) return;
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">No bandwidth data</td></tr>'; return; }
+  tbody.innerHTML = rows.map(d => `<tr>
+    <td class="text-blue">${esc(d.ip)}</td>
+    <td>${d.rate_kbps} KB/s</td>
+    <td>${(d.total_bytes/1024/1024).toFixed(2)} MB</td>
+    <td>${d.total_packets}</td>
+  </tr>`).join('');
+}
 </script>
 </body>
 </html>

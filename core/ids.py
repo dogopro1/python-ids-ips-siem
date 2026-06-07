@@ -116,3 +116,8 @@ class IDS:
     def get_alerts(self, limit: int = 50) -> list:
         alerts = list(self._alerts)
         return alerts[-limit:]
+
+
+
+
+        

@@ -42,6 +42,7 @@ class Database:
     def _create_tables(self):
         with self._write_lock:
             self._conn.executescript("""
+                -- ── Original tables ──────────────────────────────────────────
                 CREATE TABLE IF NOT EXISTS packets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     src_ip TEXT, dst_ip TEXT, dst_port INTEGER,
@@ -90,8 +91,55 @@ class Database:
                 CREATE TABLE IF NOT EXISTS ip_analysis_cache (
                     ip TEXT PRIMARY KEY, data TEXT, cached_at REAL
                 );
+
+                -- ── Module 1: Intercepting Proxy ──────────────────────────────
+                CREATE TABLE IF NOT EXISTS proxy_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    method TEXT, scheme TEXT, host TEXT, port INTEGER,
+                    path TEXT, req_headers TEXT, req_body TEXT,
+                    resp_status INTEGER, resp_headers TEXT, resp_body TEXT,
+                    client_ip TEXT, timestamp REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_prx_host ON proxy_requests(host);
+                CREATE INDEX IF NOT EXISTS idx_prx_ts   ON proxy_requests(timestamp);
+
+                -- ── Module 3: Threat Intelligence cache ───────────────────────
+                CREATE TABLE IF NOT EXISTS intel_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    data TEXT,
+                    cached_at REAL
+                );
+
+                -- ── Module 5: ARP events ───────────────────────────────────────
+                CREATE TABLE IF NOT EXISTS arp_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT, severity TEXT, ip TEXT,
+                    old_mac TEXT, new_mac TEXT,
+                    is_gratuitous INTEGER DEFAULT 0,
+                    message TEXT, timestamp REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_arp_ip ON arp_events(ip);
+                CREATE INDEX IF NOT EXISTS idx_arp_ts ON arp_events(timestamp);
+
+                -- ── Module 5: Network devices ─────────────────────────────────
+                CREATE TABLE IF NOT EXISTS network_devices (
+                    ip TEXT PRIMARY KEY,
+                    mac TEXT, hostname TEXT, vendor TEXT,
+                    first_seen REAL, last_seen REAL, status TEXT
+                );
+
+                -- ── Module 6: Vulnerability scan results ──────────────────────
+                CREATE TABLE IF NOT EXISTS vuln_scans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT, scan_data TEXT, risk_score INTEGER,
+                    findings_count INTEGER, scanned_at REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_vuln_url ON vuln_scans(url);
+                CREATE INDEX IF NOT EXISTS idx_vuln_ts  ON vuln_scans(scanned_at);
             """)
             self._conn.commit()
+
+    # ── Packet batch write ─────────────────────────────────────────────────────
 
     def queue_packet(self, packet: dict, hostname: str = None, service: str = None):
         with self._batch_lock:
@@ -127,6 +175,8 @@ class Database:
             except Exception:
                 self._conn.rollback()
 
+    # ── Alerts ─────────────────────────────────────────────────────────────────
+
     def insert_alert(self, alert: dict):
         with self._write_lock:
             try:
@@ -138,6 +188,8 @@ class Database:
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()
+
+    # ── Firewall ───────────────────────────────────────────────────────────────
 
     def insert_blocked(self, ip: str, reason: str = None, block_type: str = "auto", timeout: int = 600):
         with self._write_lock:
@@ -161,6 +213,8 @@ class Database:
             except Exception:
                 self._conn.rollback()
 
+    # ── Query: alerts ──────────────────────────────────────────────────────────
+
     def get_alerts(self, limit: int = 200, severity: str = None, search: str = None,
                    alert_type: str = None, from_ts: float = None, to_ts: float = None) -> list:
         q = "SELECT * FROM alerts WHERE 1=1"
@@ -179,6 +233,8 @@ class Database:
         q += " ORDER BY timestamp DESC LIMIT ?"
         p.append(limit)
         return [dict(r) for r in self._conn.execute(q, p).fetchall()]
+
+    # ── Query: packets ─────────────────────────────────────────────────────────
 
     def get_packets(self, limit: int = 200, protocol: str = None, src_ip: str = None,
                     dst_ip: str = None, dst_port: int = None,
@@ -201,6 +257,8 @@ class Database:
         p.append(limit)
         return [dict(r) for r in self._conn.execute(q, p).fetchall()]
 
+    # ── Query: firewall ────────────────────────────────────────────────────────
+
     def get_blocked_history(self, limit: int = 200) -> list:
         return [dict(r) for r in self._conn.execute(
             "SELECT * FROM blocked_ips ORDER BY blocked_at DESC LIMIT ?", (limit,)
@@ -210,6 +268,8 @@ class Database:
         return [dict(r) for r in self._conn.execute(
             "SELECT * FROM blocked_ips WHERE active=1 ORDER BY blocked_at DESC"
         ).fetchall()]
+
+    # ── Whitelist / Blacklist ──────────────────────────────────────────────────
 
     def get_whitelist(self) -> list:
         return [dict(r) for r in self._conn.execute("SELECT * FROM whitelist ORDER BY added_at DESC").fetchall()]
@@ -258,6 +318,8 @@ class Database:
             except Exception:
                 self._conn.rollback()
 
+    # ── Statistics ─────────────────────────────────────────────────────────────
+
     def get_stats_summary(self) -> dict:
         now = time.time()
         d = now - 86400
@@ -268,6 +330,10 @@ class Database:
             "packets_24h": self._conn.execute("SELECT COUNT(*) FROM packets WHERE timestamp>?", (d,)).fetchone()[0],
             "blocked_total": self._conn.execute("SELECT COUNT(*) FROM blocked_ips").fetchone()[0],
             "blocked_active": self._conn.execute("SELECT COUNT(*) FROM blocked_ips WHERE active=1").fetchone()[0],
+            "proxy_requests": self._conn.execute("SELECT COUNT(*) FROM proxy_requests").fetchone()[0],
+            "vuln_scans": self._conn.execute("SELECT COUNT(*) FROM vuln_scans").fetchone()[0],
+            "network_devices": self._conn.execute("SELECT COUNT(*) FROM network_devices").fetchone()[0],
+            "arp_events": self._conn.execute("SELECT COUNT(*) FROM arp_events").fetchone()[0],
         }
 
     def get_top_ports(self, limit: int = 10) -> list:
@@ -309,6 +375,8 @@ class Database:
         ).fetchall()]
         return {"packets": pkts, "alerts": alts, "blocked_history": blk}
 
+    # ── Domain scans ───────────────────────────────────────────────────────────
+
     def save_domain_scan(self, url: str, data: dict):
         with self._write_lock:
             try:
@@ -324,6 +392,8 @@ class Database:
         return [dict(r) for r in self._conn.execute(
             "SELECT id,url,scanned_at FROM domain_scans ORDER BY scanned_at DESC LIMIT ?", (limit,)
         ).fetchall()]
+
+    # ── DNS / IP cache ─────────────────────────────────────────────────────────
 
     def cache_hostname(self, ip: str, hostname: str):
         with self._write_lock:
@@ -362,6 +432,155 @@ class Database:
         if r and time.time() - r["cached_at"] < 1800:
             return json.loads(r["data"])
         return None
+
+    # ── Module 1: Proxy requests ───────────────────────────────────────────────
+
+    def save_proxy_request(self, req: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO proxy_requests
+                       (method,scheme,host,port,path,req_headers,req_body,
+                        resp_status,resp_headers,resp_body,client_ip,timestamp)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (req.get("method"), req.get("scheme"), req.get("host"), req.get("port"),
+                     req.get("path"), req.get("req_headers"), req.get("req_body"),
+                     req.get("resp_status"), req.get("resp_headers"), req.get("resp_body"),
+                     req.get("client_ip"), req.get("timestamp", time.time())),
+                )
+                # Prune old rows
+                self._conn.execute(
+                    "DELETE FROM proxy_requests WHERE id <= "
+                    "(SELECT id FROM proxy_requests ORDER BY id DESC LIMIT 1 OFFSET 5000)"
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_proxy_requests(self, limit: int = 100, host: str = None,
+                           method: str = None, status: int = None) -> list:
+        q = "SELECT * FROM proxy_requests WHERE 1=1"
+        p = []
+        if host:
+            q += " AND host LIKE ?"; p.append(f"%{host}%")
+        if method:
+            q += " AND method=?"; p.append(method.upper())
+        if status:
+            q += " AND resp_status=?"; p.append(status)
+        q += " ORDER BY timestamp DESC LIMIT ?"
+        p.append(limit)
+        return [dict(r) for r in self._conn.execute(q, p).fetchall()]
+
+    def get_proxy_request_by_id(self, rid: int) -> dict:
+        r = self._conn.execute("SELECT * FROM proxy_requests WHERE id=?", (rid,)).fetchone()
+        return dict(r) if r else {}
+
+    # ── Module 3: Threat intel cache ──────────────────────────────────────────
+
+    def get_intel_cache(self, cache_key: str, ttl: int = 3600):
+        r = self._conn.execute(
+            "SELECT data,cached_at FROM intel_cache WHERE cache_key=?", (cache_key,)
+        ).fetchone()
+        if r and time.time() - r["cached_at"] < ttl:
+            try:
+                return json.loads(r["data"])
+            except Exception:
+                return None
+        return None
+
+    def set_intel_cache(self, cache_key: str, data: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO intel_cache (cache_key,data,cached_at) VALUES (?,?,?)",
+                    (cache_key, json.dumps(data, default=str), time.time()),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    # ── Module 5: ARP events ───────────────────────────────────────────────────
+
+    def save_arp_event(self, event: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO arp_events
+                       (type,severity,ip,old_mac,new_mac,is_gratuitous,message,timestamp)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (event.get("type"), event.get("severity"), event.get("ip"),
+                     event.get("old_mac"), event.get("new_mac"),
+                     1 if event.get("is_gratuitous") else 0,
+                     event.get("message"), event.get("timestamp", time.time())),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_arp_events(self, limit: int = 100) -> list:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT * FROM arp_events ORDER BY timestamp DESC LIMIT ?", (limit,)
+        ).fetchall()]
+
+    # ── Module 5: Network devices ──────────────────────────────────────────────
+
+    def upsert_network_device(self, dev: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO network_devices (ip,mac,hostname,vendor,first_seen,last_seen,status)
+                       VALUES (?,?,?,?,?,?,?)
+                       ON CONFLICT(ip) DO UPDATE SET
+                         mac=excluded.mac, hostname=excluded.hostname,
+                         vendor=excluded.vendor, last_seen=excluded.last_seen,
+                         status=excluded.status""",
+                    (dev.get("ip"), dev.get("mac"), dev.get("hostname"),
+                     dev.get("vendor"), dev.get("first_seen", time.time()),
+                     dev.get("last_seen", time.time()), dev.get("status", "up")),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_network_devices(self) -> list:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT * FROM network_devices ORDER BY last_seen DESC"
+        ).fetchall()]
+
+    # ── Module 6: Vulnerability scans ─────────────────────────────────────────
+
+    def save_vuln_scan(self, url: str, data: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO vuln_scans (url,scan_data,risk_score,findings_count,scanned_at)
+                       VALUES (?,?,?,?,?)""",
+                    (url, json.dumps(data, default=str),
+                     data.get("risk_score", 0), len(data.get("findings", [])),
+                     time.time()),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_vuln_scans(self, limit: int = 20) -> list:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT id,url,risk_score,findings_count,scanned_at FROM vuln_scans ORDER BY scanned_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()]
+
+    def get_vuln_scan_detail(self, scan_id: int) -> dict:
+        r = self._conn.execute("SELECT * FROM vuln_scans WHERE id=?", (scan_id,)).fetchone()
+        if r:
+            d = dict(r)
+            try:
+                d["scan_data"] = json.loads(d["scan_data"])
+            except Exception:
+                pass
+            return d
+        return {}
+
+    # ── Export ─────────────────────────────────────────────────────────────────
 
     def export_alerts_csv(self) -> str:
         rows = self._conn.execute(
