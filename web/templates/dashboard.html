@@ -95,6 +95,7 @@ tbody tr:hover{background:rgba(255,255,255,.025)}
 .badge-red{background:rgba(239,68,68,.15);color:var(--red)}
 .badge-yellow{background:rgba(234,179,8,.15);color:var(--yellow)}
 .badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-orange{background:rgba(249,115,22,.15);color:#f97316}
 
 /* ── Forms / Inputs ──────────────────────────────────────────────── */
 .form-row{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
@@ -238,6 +239,9 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
   </div>
   <div class="nav-item" data-tab="network">
     <span class="nav-icon">&#x1F3E0;</span><span>Home Network</span>
+  </div>
+  <div class="nav-item" data-tab="recon">
+    <span class="nav-icon">&#x1F50D;</span><span>Recon</span>
   </div>
 
   <div class="sidebar-footer">
@@ -734,6 +738,90 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
           <div id="arpscan-output" class="output-box" style="display:none"></div>
         </div>
       </div>
+
+      <!-- ── Top Ports + Ping Sweep ──────────────────────────── -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Top Ports Scan (--top-ports)</div>
+          <div class="form-row">
+            <input type="text" id="tp-host" placeholder="host or IP" style="flex:1">
+            <select id="tp-n" style="width:100px">
+              <option value="20">Top 20</option>
+              <option value="100" selected>Top 100</option>
+              <option value="500">Top 500</option>
+              <option value="1000">Top 1000</option>
+            </select>
+            <button class="btn btn-blue" onclick="runTopPorts()">Scan</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportScan('xml')" title="Export XML">XML</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportScan('grepable')" title="Export grepable">-oG</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportScan('normal')" title="Export normal">-oN</button>
+          </div>
+          <div id="tp-output" class="output-box" style="display:none"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Ping Sweep (Host Discovery)</div>
+          <div class="form-row">
+            <input type="text" id="sweep-subnet" placeholder="192.168.1.0/24 (auto if empty)" style="flex:1">
+            <button class="btn btn-blue" onclick="runPingSweep()">Sweep</button>
+          </div>
+          <div id="sweep-output" class="output-box" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- ── Stealth Scans ────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">Stealth / Raw Scans (require Administrator/root) <span class="badge badge-red" style="font-size:11px;margin-left:6px">Scapy</span></div>
+        <div class="form-row">
+          <input type="text" id="stealth-host" placeholder="host or IP" style="flex:1;max-width:220px">
+          <input type="text" id="stealth-ports" placeholder="ports (1-1024)" style="width:150px">
+          <select id="stealth-type">
+            <option value="syn">SYN (-sS) Stealth</option>
+            <option value="null">NULL (-sN) — no flags</option>
+            <option value="fin">FIN (-sF) — FIN only</option>
+            <option value="xmas">Xmas (-sX) — FIN+PSH+URG</option>
+            <option value="ack">ACK (-sA) — firewall map</option>
+          </select>
+          <button class="btn btn-orange" onclick="runStealthScan()">Scan</button>
+        </div>
+        <div class="card-sub" style="margin-top:4px">SYN/NULL/FIN/Xmas detect open/filtered ports without full connect. ACK maps firewall rules.</div>
+        <div id="stealth-output" class="output-box" style="display:none"></div>
+      </div>
+
+      <!-- ── NSE Scripts ──────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">NSE Scripts (Nmap Script Engine equivalent)</div>
+        <div class="form-row">
+          <input type="text" id="nse-host" placeholder="host or IP" style="flex:1;max-width:220px">
+          <input type="text" id="nse-ports" placeholder="open ports (80,443,22)" style="width:180px">
+          <button class="btn btn-blue" onclick="runNSE()">Run Scripts</button>
+        </div>
+        <div class="form-row mt8" style="gap:10px;flex-wrap:wrap;font-size:13px">
+          <label><input type="checkbox" class="nse-check" value="http-title" checked> http-title</label>
+          <label><input type="checkbox" class="nse-check" value="http-headers" checked> http-headers</label>
+          <label><input type="checkbox" class="nse-check" value="ssl-cert" checked> ssl-cert</label>
+          <label><input type="checkbox" class="nse-check" value="ftp-anon" checked> ftp-anon</label>
+          <label><input type="checkbox" class="nse-check" value="smtp-commands"> smtp-commands</label>
+          <label><input type="checkbox" class="nse-check" value="ssh-hostkey" checked> ssh-hostkey</label>
+          <label><input type="checkbox" class="nse-check" value="http-robots"> http-robots</label>
+          <label><input type="checkbox" class="nse-check" value="http-server-header"> http-server-header</label>
+          <label><input type="checkbox" class="nse-check" value="smb-os-discovery"> smb-os-discovery</label>
+          <label><input type="checkbox" class="nse-check" value="vnc-info"> vnc-info</label>
+          <label><input type="checkbox" class="nse-check" value="http-auth-finder"> http-auth-finder</label>
+        </div>
+        <div id="nse-output" class="output-box" style="display:none;max-height:400px"></div>
+      </div>
+
+      <!-- ── IPv6 Scan ────────────────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">IPv6 Port Scanner</div>
+        <div class="form-row">
+          <input type="text" id="ipv6-host" placeholder="IPv6 address (::1 or 2001:db8::1)" style="flex:1">
+          <input type="text" id="ipv6-ports" placeholder="1-1024 or 80,443" style="width:160px">
+          <button class="btn btn-blue" onclick="runIPv6Scan()">Scan IPv6</button>
+        </div>
+        <div id="ipv6-output" class="output-box" style="display:none"></div>
+      </div>
+
     </div>
 
     <!-- ── TAB: Logs ──────────────────────────────────────────────── -->
@@ -801,6 +889,156 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
         </div>
       </div>
       <div id="proxy-detail"></div>
+
+      <!-- ── Proxy sub-tabs ──────────────────────────────────── -->
+      <div class="section-title" style="margin-top:20px">BurpSuite Tools</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="ptab-intruder-btn" onclick="showProxySubTab('intruder')">&#x1F3AF; Intruder</button>
+        <button class="btn btn-ghost btn-sm" id="ptab-decoder-btn" onclick="showProxySubTab('decoder')">&#x1F4BB; Decoder</button>
+        <button class="btn btn-ghost btn-sm" id="ptab-comparer-btn" onclick="showProxySubTab('comparer')">&#x1F50D; Comparer</button>
+        <button class="btn btn-ghost btn-sm" id="ptab-spider-btn" onclick="showProxySubTab('spider')">&#x1F577; Spider</button>
+      </div>
+
+      <!-- INTRUDER -->
+      <div id="ptab-intruder" style="display:none">
+        <div class="card">
+          <div class="card-title">Intruder — Payload-based Fuzzer</div>
+          <div class="form-row">
+            <select id="intr-method" style="width:90px">
+              <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+            </select>
+            <input type="text" id="intr-url" placeholder="https://target.com/search?q=§test§" style="flex:1">
+          </div>
+          <div style="margin-bottom:8px;font-size:12px;color:var(--muted)">Mark injection positions with § (e.g. q=§value§). Body template below:</div>
+          <textarea id="intr-body" placeholder="POST body template (optional) — mark with §positions§" style="width:100%;height:60px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:monospace;font-size:13px;border-radius:4px;resize:vertical"></textarea>
+          <div class="form-row mt8">
+            <select id="intr-attack-type">
+              <option value="sniper">Sniper — one position at a time</option>
+              <option value="battering_ram">Battering Ram — all positions same payload</option>
+              <option value="pitchfork">Pitchfork — parallel lists (zip)</option>
+              <option value="cluster_bomb">Cluster Bomb — cartesian product</option>
+            </select>
+            <input type="number" id="intr-max-req" value="200" min="1" max="500" style="width:80px" title="Max requests">
+            <input type="number" id="intr-concurrency" value="10" min="1" max="30" style="width:70px" title="Concurrency">
+            <button class="btn btn-red" id="intr-run-btn" onclick="runIntruder()">&#x25B6; Attack</button>
+          </div>
+          <div class="card-title" style="margin-top:12px">Payload Set 1 <span class="text-muted" style="font-size:11px">(one payload per line)</span></div>
+          <div class="form-row">
+            <textarea id="intr-payloads-1" placeholder="' OR 1=1&#10;admin&#10;test" style="flex:1;height:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:monospace;font-size:12px;border-radius:4px"></textarea>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <button class="btn btn-ghost btn-sm" onclick="loadBuiltinPayloads('sqli_basic')">SQLi</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadBuiltinPayloads('xss_basic')">XSS</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadBuiltinPayloads('lfi_basic')">LFI</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadBuiltinPayloads('fuzz_common')">Fuzz</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadBuiltinPayloads('numbers_1_100')">1-100</button>
+            </div>
+          </div>
+          <div id="intr-payload-sets-extra" style="margin-top:8px"></div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="addPayloadSet()">+ Add Payload Set 2 (Pitchfork/ClusterBomb)</button>
+        </div>
+        <div id="intr-results" style="margin-top:12px"></div>
+      </div>
+
+      <!-- DECODER -->
+      <div id="ptab-decoder" style="display:none">
+        <div class="card">
+          <div class="card-title">Decoder — Encode / Decode / Hash</div>
+          <div class="form-row">
+            <select id="dec-op">
+              <option value="encode">Encode</option>
+              <option value="decode">Decode</option>
+              <option value="hash">Hash</option>
+              <option value="jwt">JWT Decode</option>
+            </select>
+            <select id="dec-method">
+              <option value="base64">Base64</option>
+              <option value="base64url">Base64 URL</option>
+              <option value="url">URL</option>
+              <option value="url_form">URL (form)</option>
+              <option value="html">HTML entities</option>
+              <option value="hex">Hex</option>
+              <option value="binary">Binary</option>
+              <option value="gzip">Gzip (base64 output)</option>
+              <option value="zlib">Zlib (base64 output)</option>
+              <option value="rot13">ROT13</option>
+              <option value="reverse">Reverse</option>
+              <option value="md5">MD5</option>
+              <option value="sha1">SHA-1</option>
+              <option value="sha256">SHA-256</option>
+              <option value="sha512">SHA-512</option>
+            </select>
+            <button class="btn btn-blue" onclick="runDecoder()">&#x25B6; Run</button>
+            <button class="btn btn-ghost btn-sm" onclick="detectEncoding()">Auto-detect</button>
+            <button class="btn btn-ghost btn-sm" onclick="swapDecoder()">&#x21C5; Swap</button>
+          </div>
+          <div class="grid-2" style="margin-top:10px;gap:10px">
+            <div>
+              <div class="card-title" style="margin-bottom:4px">Input</div>
+              <textarea id="dec-input" style="width:100%;height:160px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:monospace;font-size:13px;border-radius:4px;resize:vertical" placeholder="Paste text to encode/decode/hash..."></textarea>
+            </div>
+            <div>
+              <div class="card-title" style="margin-bottom:4px">Output <span id="dec-detect" class="badge badge-blue" style="font-size:11px"></span></div>
+              <textarea id="dec-output" readonly style="width:100%;height:160px;background:var(--surface2);border:1px solid var(--border);color:var(--green);padding:8px;font-family:monospace;font-size:13px;border-radius:4px;resize:vertical"></textarea>
+            </div>
+          </div>
+          <div id="dec-error" class="text-red" style="margin-top:6px;font-size:13px"></div>
+        </div>
+      </div>
+
+      <!-- COMPARER -->
+      <div id="ptab-comparer" style="display:none">
+        <div class="card">
+          <div class="card-title">Comparer — Diff Two Payloads</div>
+          <div class="form-row">
+            <select id="cmp-mode">
+              <option value="words">Word-level diff</option>
+              <option value="lines">Line-level diff</option>
+              <option value="chars">Character-level diff</option>
+            </select>
+            <button class="btn btn-blue" onclick="runComparer()">Compare</button>
+            <span id="cmp-stats" class="text-muted" style="font-size:12px"></span>
+          </div>
+          <div class="grid-2" style="gap:10px;margin-top:8px">
+            <div>
+              <div class="card-title" style="margin-bottom:4px">Left (Original)</div>
+              <textarea id="cmp-left" style="width:100%;height:180px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:monospace;font-size:12px;border-radius:4px;resize:vertical" placeholder="Paste original text..."></textarea>
+            </div>
+            <div>
+              <div class="card-title" style="margin-bottom:4px">Right (Modified)</div>
+              <textarea id="cmp-right" style="width:100%;height:180px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;font-family:monospace;font-size:12px;border-radius:4px;resize:vertical" placeholder="Paste modified text..."></textarea>
+            </div>
+          </div>
+          <div class="card-title" style="margin-top:12px">Diff Result</div>
+          <div class="grid-2" style="gap:10px">
+            <div class="output-box" id="cmp-left-diff" style="min-height:120px;white-space:pre-wrap;font-size:12px"></div>
+            <div class="output-box" id="cmp-right-diff" style="min-height:120px;white-space:pre-wrap;font-size:12px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPIDER -->
+      <div id="ptab-spider" style="display:none">
+        <div class="card">
+          <div class="card-title">Spider — Web Crawler</div>
+          <div class="form-row">
+            <input type="text" id="spider-url" placeholder="https://target.example.com" style="flex:1;max-width:360px">
+            <input type="number" id="spider-max-pages" value="30" min="1" max="100" style="width:70px" title="Max pages">
+            <select id="spider-max-depth">
+              <option value="2">Depth 2</option>
+              <option value="3" selected>Depth 3</option>
+              <option value="4">Depth 4</option>
+              <option value="5">Depth 5</option>
+            </select>
+            <button class="btn btn-blue" id="spider-btn" onclick="runSpider()">&#x1F577; Crawl</button>
+          </div>
+          <div id="spider-result"></div>
+        </div>
+        <div class="section-title" style="margin-top:14px">Previous Crawls</div>
+        <div class="card">
+          <div id="spider-history-body"><div class="empty">No crawls yet</div></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ── TAB: DPI Inspector ────────────────────────────────────── -->
@@ -834,6 +1072,80 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
         </div>
       </div>
       <div id="dpi-stream-detail"></div>
+
+      <!-- ── DPI Advanced ────────────────────────────────────────── -->
+      <div class="section-title" style="margin-top:20px">Wireshark Tools</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="dtab-filter-btn" onclick="showDPISubTab('filter')">&#x1F50E; Display Filter</button>
+        <button class="btn btn-ghost btn-sm" id="dtab-stats-btn" onclick="showDPISubTab('stats')">&#x1F4CA; Protocol Stats</button>
+        <button class="btn btn-ghost btn-sm" id="dtab-udp-btn" onclick="showDPISubTab('udp')">&#x1F4E1; UDP Streams</button>
+        <button class="btn btn-ghost btn-sm" id="dtab-expert-btn" onclick="showDPISubTab('expert')">&#x26A0; Expert Info</button>
+      </div>
+
+      <!-- DISPLAY FILTER -->
+      <div id="dtab-filter" style="display:none">
+        <div class="card">
+          <div class="card-title">Display Filter <span class="text-muted" style="font-size:11px">— Wireshark-style expression language</span></div>
+          <div class="form-row">
+            <input type="text" id="dpi-filter-expr" placeholder="ip.src == 192.168.1.1 and tcp.port == 80" style="flex:1;font-family:monospace">
+            <button class="btn btn-blue" onclick="applyDPIFilter()">&#x25B6; Apply</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearDPIFilter()">Clear</button>
+          </div>
+          <div style="margin-top:6px;font-size:11px;color:var(--muted)">
+            Fields: <code>ip.src</code> <code>ip.dst</code> <code>ip.addr</code> <code>ip.ttl</code>
+            <code>tcp.port</code> <code>tcp.srcport</code> <code>tcp.dstport</code> <code>tcp.flags.syn</code>
+            <code>udp.port</code> <code>dns.qry.name</code> <code>http.request.method</code>
+            <code>http.response.code</code> <code>frame.len</code> <code>protocol</code>
+            | Ops: == != &gt; &lt; contains matches 10.0.0.0/24
+            | Logic: and or not
+          </div>
+          <div id="dpi-filter-stats" class="text-muted" style="font-size:12px;margin-top:6px"></div>
+        </div>
+        <div class="card mt8">
+          <div class="card-title">Filtered Packets <span id="dpi-filter-count" class="badge badge-blue"></span></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Time</th><th>Src IP</th><th>Dst IP</th><th>Proto</th><th>Sport</th><th>Dport</th><th>Flags</th><th>Len</th><th>Info</th></tr></thead>
+              <tbody id="dpi-filter-body"><tr><td colspan="9" class="empty">Run a filter to see results</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROTOCOL STATS -->
+      <div id="dtab-stats" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="loadProtoStats('hierarchy')">Hierarchy</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadProtoStats('conversations')">Conversations</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadProtoStats('endpoints')">Endpoints</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadProtoStats('io_graph')">I/O Graph</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadProtoStats('services')">Services</button>
+        </div>
+        <div id="proto-stats-body"><div class="empty">Select a view above</div></div>
+      </div>
+
+      <!-- UDP STREAMS -->
+      <div id="dtab-udp" style="display:none">
+        <div class="card">
+          <div class="card-title">UDP Streams <button class="btn btn-ghost btn-sm" style="float:right" onclick="loadUDPStreams()">&#x21BB; Refresh</button></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Src IP</th><th>Dst IP</th><th>Sport</th><th>Dport</th><th>Datagrams</th><th>Bytes</th><th>Updated</th><th></th></tr></thead>
+              <tbody id="udp-streams-body"><tr><td colspan="8" class="empty">No UDP streams</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="udp-stream-detail"></div>
+      </div>
+
+      <!-- EXPERT INFO -->
+      <div id="dtab-expert" style="display:none">
+        <div class="card">
+          <div class="card-title">Expert Information <button class="btn btn-ghost btn-sm" style="float:right" onclick="loadExpertInfo()">&#x21BB; Analyze</button></div>
+          <div id="expert-info-body"><div class="empty">Click Analyze to scan captured packets</div></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ── TAB: Threat Intel ─────────────────────────────────────── -->
@@ -885,6 +1197,18 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
           </label>
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
             <input type="checkbox" class="vuln-check" value="dirbrute" checked> Dir Bruteforce
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="cmdi" checked> Cmd Injection
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="ssti" checked> SSTI
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="xxe" checked> XXE
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+            <input type="checkbox" class="vuln-check" value="ssrf" checked> SSRF
           </label>
         </div>
         <div class="card-sub mt8 text-orange">Only test systems you own or have explicit permission to test.</div>
@@ -946,6 +1270,206 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
         </div>
       </div>
     </div>
+
+    <!-- ── TAB: Recon ──────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-recon">
+      <!-- Sub-tab nav -->
+      <div class="sub-tabs" id="recon-sub-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn btn-blue recon-sub active" data-rsub="subdomains" onclick="showReconSub('subdomains')">Subdomains</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="dns" onclick="showReconSub('dns')">DNS Records</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="wayback" onclick="showReconSub('wayback')">Wayback URLs</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="favicon" onclick="showReconSub('favicon')">Favicon Hash</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="reverse_ip" onclick="showReconSub('reverse_ip')">Reverse IP</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="js_files" onclick="showReconSub('js_files')">JS Files</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="asn" onclick="showReconSub('asn')">ASN</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="emails" onclick="showReconSub('emails')">Email Contacts</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="http_probe" onclick="showReconSub('http_probe')">HTTP Probe</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="sec_headers" onclick="showReconSub('sec_headers')">Security Headers</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="tech" onclick="showReconSub('tech')">Web Tech</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="broken_links" onclick="showReconSub('broken_links')">Broken Links</button>
+      </div>
+
+      <!-- Subdomain Enumeration -->
+      <div id="recon-panel-subdomains" class="recon-panel">
+        <div class="section-title">Subdomain Enumeration</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-sub-domain" placeholder="example.com" style="width:220px">
+            <label><input type="checkbox" id="recon-sub-probe" checked> HTTP Probe</label>
+            <label><input type="checkbox" id="recon-sub-brute"> Bruteforce</label>
+            <button class="btn btn-blue" onclick="runSubdomainEnum()">Enumerate</button>
+            <span id="recon-sub-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-sub-summary" class="text-muted" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>Subdomain</th><th>IPs</th><th>Status</th><th>Title</th><th>Server</th><th>Source</th></tr></thead>
+            <tbody id="recon-sub-body"><tr><td colspan="6" class="empty">Enter domain and click Enumerate</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- DNS Records -->
+      <div id="recon-panel-dns" class="recon-panel" style="display:none">
+        <div class="section-title">DNS Records</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-dns-domain" placeholder="example.com" style="width:220px">
+            <button class="btn btn-blue" onclick="runDNSLookup()">Lookup</button>
+            <button class="btn btn-ghost" onclick="runZoneTransfer()">Zone Transfer</button>
+            <span id="recon-dns-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-dns-result"></div>
+        </div>
+      </div>
+
+      <!-- Wayback URLs -->
+      <div id="recon-panel-wayback" class="recon-panel" style="display:none">
+        <div class="section-title">Wayback Machine URLs</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-wb-domain" placeholder="example.com" style="width:220px">
+            <input type="number" id="recon-wb-limit" placeholder="2000" style="width:80px" value="2000">
+            <input type="number" id="recon-wb-from" placeholder="From year" style="width:100px">
+            <input type="number" id="recon-wb-to" placeholder="To year" style="width:100px">
+            <button class="btn btn-blue" onclick="runWayback()">Fetch</button>
+            <span id="recon-wb-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-wb-summary" class="text-muted" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Date</th><th>Status</th><th>MIME</th><th>Tags</th></tr></thead>
+            <tbody id="recon-wb-body"><tr><td colspan="5" class="empty">Enter domain and click Fetch</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- Favicon Hash -->
+      <div id="recon-panel-favicon" class="recon-panel" style="display:none">
+        <div class="section-title">Favicon Hash (Shodan)</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-fav-url" placeholder="https://example.com" style="width:280px">
+            <button class="btn btn-blue" onclick="runFavicon()">Fetch Favicon</button>
+            <span id="recon-fav-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-fav-result"></div>
+        </div>
+      </div>
+
+      <!-- Reverse IP -->
+      <div id="recon-panel-reverse_ip" class="recon-panel" style="display:none">
+        <div class="section-title">Reverse IP Lookup</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-rip-ip" placeholder="IP address or domain" style="width:220px">
+            <button class="btn btn-blue" onclick="runReverseIP()">Lookup</button>
+            <span id="recon-rip-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-rip-result"></div>
+        </div>
+      </div>
+
+      <!-- JS Files -->
+      <div id="recon-panel-js_files" class="recon-panel" style="display:none">
+        <div class="section-title">JavaScript File Analyzer</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-js-url" placeholder="https://example.com" style="width:280px">
+            <button class="btn btn-blue" onclick="runJSAnalyzer()">Analyze</button>
+            <span id="recon-js-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-js-summary" class="text-muted" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>JS File</th><th>Size</th><th>Secrets</th><th>Endpoints</th><th>IPs</th></tr></thead>
+            <tbody id="recon-js-body"><tr><td colspan="5" class="empty">Enter URL and click Analyze</td></tr></tbody>
+          </table></div>
+          <div id="recon-js-secrets" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ASN Lookup -->
+      <div id="recon-panel-asn" class="recon-panel" style="display:none">
+        <div class="section-title">ASN Lookup</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-asn-query" placeholder="IP address or domain" style="width:220px">
+            <button class="btn btn-blue" onclick="runASN()">Lookup</button>
+            <span id="recon-asn-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-asn-result"></div>
+        </div>
+      </div>
+
+      <!-- Email Harvester -->
+      <div id="recon-panel-emails" class="recon-panel" style="display:none">
+        <div class="section-title">Email Contacts</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-em-url" placeholder="https://example.com" style="width:280px">
+            <input type="number" id="recon-em-pages" placeholder="20" value="20" style="width:70px">
+            <button class="btn btn-blue" onclick="runEmailHarvest()">Harvest</button>
+            <span id="recon-em-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div class="tbl-wrap"><table><thead><tr><th>Email</th><th>Found On (pages)</th><th>Count</th></tr></thead>
+            <tbody id="recon-em-body"><tr><td colspan="3" class="empty">Enter URL and click Harvest</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- HTTP Probe -->
+      <div id="recon-panel-http_probe" class="recon-panel" style="display:none">
+        <div class="section-title">HTTP Probe</div>
+        <div class="card">
+          <div class="form-row mb8" style="align-items:flex-start">
+            <textarea id="recon-probe-targets" placeholder="One host per line&#10;example.com&#10;192.168.1.1" style="width:280px;height:80px;resize:vertical"></textarea>
+            <button class="btn btn-blue" onclick="runHTTPProbe()">Probe All</button>
+            <span id="recon-probe-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div class="tbl-wrap"><table><thead><tr><th>Target</th><th>Status</th><th>Title</th><th>Server</th><th>Time (ms)</th><th>HSTS</th><th>CSP</th></tr></thead>
+            <tbody id="recon-probe-body"><tr><td colspan="7" class="empty">Enter hosts and click Probe All</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- Security Headers -->
+      <div id="recon-panel-sec_headers" class="recon-panel" style="display:none">
+        <div class="section-title">Security Headers</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-sh-url" placeholder="https://example.com" style="width:280px">
+            <button class="btn btn-blue" onclick="runSecurityHeaders()">Analyze</button>
+            <span id="recon-sh-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-sh-result"></div>
+        </div>
+      </div>
+
+      <!-- Web Tech -->
+      <div id="recon-panel-tech" class="recon-panel" style="display:none">
+        <div class="section-title">Web Technology Detector</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-tech-url" placeholder="https://example.com" style="width:280px">
+            <button class="btn btn-blue" onclick="runTechDetect()">Detect</button>
+            <span id="recon-tech-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-tech-result"></div>
+        </div>
+      </div>
+
+      <!-- Broken Links -->
+      <div id="recon-panel-broken_links" class="recon-panel" style="display:none">
+        <div class="section-title">Broken Links Checker</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-bl-url" placeholder="https://example.com" style="width:280px">
+            <input type="number" id="recon-bl-pages" placeholder="20" value="20" style="width:70px">
+            <button class="btn btn-blue" onclick="runBrokenLinks()">Check</button>
+            <span id="recon-bl-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-bl-summary" class="text-muted" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Status</th><th>External</th><th>Found On</th></tr></thead>
+            <tbody id="recon-bl-body"><tr><td colspan="4" class="empty">Enter URL and click Check</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+    </div><!-- #tab-recon -->
 
   </div><!-- .content -->
 </div><!-- .main-area -->
@@ -1046,7 +1570,9 @@ async function loadIPLive() {
 const TAB_TITLES = {
   overview:'Overview', packets:'Packets', alerts:'Alerts', connections:'Connections',
   ip_analysis:'IP Analysis', domain_scan:'Domain Scanner', statistics:'Statistics',
-  firewall:'Firewall', tools:'Network Tools', logs:'Logs'
+  firewall:'Firewall', tools:'Network Tools', logs:'Logs',
+  proxy:'HTTP Proxy', dpi:'DPI Inspector', intel:'Threat Intel',
+  vuln:'Vuln Scanner', network:'Home Network', recon:'Recon'
 };
 let activeTab = 'overview';
 
@@ -2403,6 +2929,859 @@ async function loadBandwidth() {
     <td>${(d.total_bytes/1024/1024).toFixed(2)} MB</td>
     <td>${d.total_packets}</td>
   </tr>`).join('');
+}
+
+// ── Tools: Advanced Nmap functions ────────────────────────────────────────────
+
+async function runTopPorts() {
+  const host = document.getElementById('tp-host').value.trim();
+  const n = document.getElementById('tp-n').value;
+  const out = document.getElementById('tp-output');
+  if (!host) return;
+  out.style.display = 'block';
+  out.textContent = 'Scanning...';
+  const r = await fetch('/api/tools/top_ports', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host, n:parseInt(n), banner:true})}).catch(()=>null);
+  if (!r?.ok) { out.textContent = 'Error'; return; }
+  const d = await r.json();
+  if (d.error) { out.textContent = 'Error: ' + d.error; return; }
+  const open = (d.open||[]).map(p => `  ${p.port}/${p.proto}  ${p.state}  ${p.service||''}  ${p.banner||''}`).join('\n');
+  out.textContent = `Host: ${d.host}\nOpen ports: ${(d.open||[]).length} / ${d.total_scanned}\nTiming: ${d.timing_ms}ms\n\n${open||'No open ports found'}`;
+}
+
+async function runPingSweep() {
+  const subnet = document.getElementById('sweep-subnet').value.trim();
+  const out = document.getElementById('sweep-output');
+  if (!subnet) return;
+  out.style.display = 'block';
+  out.textContent = 'Sweeping ' + subnet + '...';
+  const r = await fetch('/api/tools/ping_sweep', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({subnet})}).catch(()=>null);
+  if (!r?.ok) { out.textContent = 'Error'; return; }
+  const d = await r.json();
+  if (d.error) { out.textContent = 'Error: ' + d.error; return; }
+  const hosts = (d.live_hosts||[]).join('\n  ');
+  out.textContent = `Subnet: ${subnet}\nAlive: ${d.alive_count||0}\n\n  ${hosts||'No live hosts'}`;
+}
+
+async function runStealthScan() {
+  const host = document.getElementById('stealth-host').value.trim();
+  const ports = document.getElementById('stealth-ports').value.trim();
+  const type = document.getElementById('stealth-type').value;
+  const out = document.getElementById('stealth-output');
+  if (!host) return;
+  out.style.display = 'block';
+  out.textContent = `Running ${type} scan on ${host}...`;
+  const urlMap = {syn:'/api/tools/syn_scan', null:'/api/tools/null_scan', fin:'/api/tools/fin_scan', xmas:'/api/tools/xmas_scan', ack:'/api/tools/ack_scan'};
+  const url = urlMap[type] || '/api/tools/syn_scan';
+  const portList = ports ? ports.split(',').map(p=>parseInt(p)).filter(Boolean) : [];
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host, ports: portList.length ? portList : undefined})}).catch(()=>null);
+  if (!r?.ok) { out.textContent = 'Error'; return; }
+  const d = await r.json();
+  if (d.error) { out.textContent = 'Error: ' + d.error; return; }
+  const lines = [];
+  if (d.open_ports) lines.push('Open: ' + d.open_ports.join(', '));
+  if (d.filtered_ports) lines.push('Filtered: ' + d.filtered_ports.join(', '));
+  if (d.unfiltered) lines.push('Unfiltered: ' + d.unfiltered.join(', '));
+  if (d.closed_ports) lines.push('Closed: ' + d.closed_ports.join(', '));
+  out.textContent = `Scan type: ${type}\nHost: ${host}\n\n${lines.join('\n')||JSON.stringify(d,null,2)}`;
+}
+
+async function runNSE() {
+  const host = document.getElementById('nse-host').value.trim();
+  const portStr = document.getElementById('nse-ports').value.trim();
+  if (!host) return;
+  const checks = document.querySelectorAll('.nse-check:checked');
+  const scripts = Array.from(checks).map(c => c.value);
+  if (!scripts.length) { alert('Select at least one NSE script'); return; }
+  const out = document.getElementById('nse-output');
+  out.style.display = 'block';
+  out.textContent = 'Running NSE scripts...';
+  const open_ports = portStr ? portStr.split(',').map(p=>parseInt(p)).filter(Boolean) : [];
+  const r = await fetch('/api/tools/nse', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host, scripts, open_ports})}).catch(()=>null);
+  if (!r?.ok) { out.textContent = 'Error'; return; }
+  const d = await r.json();
+  if (d.error) { out.textContent = 'Error: ' + d.error; return; }
+  const results = d.results || {};
+  const lines = Object.entries(results).map(([script, res]) => {
+    if (res.error) return `[${script}] ERROR: ${res.error}`;
+    return `[${script}]\n${JSON.stringify(res, null, 2)}`;
+  });
+  out.textContent = lines.join('\n\n') || 'No results';
+}
+
+async function runIPv6Scan() {
+  const host = document.getElementById('ipv6-host').value.trim();
+  const portStr = document.getElementById('ipv6-ports').value.trim();
+  const out = document.getElementById('ipv6-output');
+  if (!host) return;
+  out.style.display = 'block';
+  out.textContent = 'Scanning IPv6 target...';
+  const ports = portStr ? portStr.split(',').map(p=>parseInt(p)).filter(Boolean) : [];
+  const r = await fetch('/api/tools/ipv6scan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host, ports: ports.length ? ports : undefined, banner:true})}).catch(()=>null);
+  if (!r?.ok) { out.textContent = 'Error'; return; }
+  const d = await r.json();
+  if (d.error) { out.textContent = 'Error: ' + d.error; return; }
+  const open = (d.open||[]).map(p => `  ${p.port}  ${p.state}  ${p.banner||''}`).join('\n');
+  out.textContent = `IPv6 Host: ${d.host}\nOpen: ${(d.open||[]).length}\n\n${open||'No open ports'}`;
+}
+
+async function exportScan(fmt) {
+  const host = document.getElementById('tp-host')?.value.trim() || '';
+  if (!host) { alert('Fill in a host first'); return; }
+  const r = await fetch('/api/tools/scan_export', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({host, format: fmt})}).catch(()=>null);
+  if (!r?.ok) { alert('Export failed'); return; }
+  const blob = await r.blob();
+  const ext = {xml:'xml', grepable:'gnmap', normal:'nmap'}[fmt] || 'txt';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `scan_${host.replace(/[^a-z0-9]/gi,'_')}.${ext}`;
+  a.click();
+}
+
+// ── Proxy: Intruder ───────────────────────────────────────────────────────────
+
+let _intrPayloadSets = 1;
+
+function showProxySubTab(name) {
+  ['intruder','decoder','comparer','spider'].forEach(t => {
+    document.getElementById('ptab-'+t).style.display = t===name ? '' : 'none';
+    const btn = document.getElementById('ptab-'+t+'-btn');
+    if (btn) btn.classList.toggle('active', t===name);
+  });
+  if (name==='spider') loadSpiderHistory();
+}
+
+async function loadBuiltinPayloads(key) {
+  const r = await fetch('/api/intruder/payloads').catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const payloads = d[key] || [];
+  const ta = document.getElementById('intr-payloads-1');
+  if (ta) ta.value = payloads.join('\n');
+}
+
+function addPayloadSet() {
+  _intrPayloadSets++;
+  const n = _intrPayloadSets;
+  const container = document.getElementById('intr-payload-sets-extra');
+  const div = document.createElement('div');
+  div.id = 'intr-payloads-set-' + n;
+  div.innerHTML = `<div class="card-title" style="margin:6px 0 2px">Payload Set ${n}</div>
+    <textarea id="intr-payloads-${n}" style="width:100%;height:60px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px;font-family:monospace;font-size:12px;border-radius:4px" placeholder="One payload per line"></textarea>`;
+  container.appendChild(div);
+}
+
+async function runIntruder() {
+  const method = document.getElementById('intr-method').value;
+  const url = document.getElementById('intr-url').value.trim();
+  const body_template = document.getElementById('intr-body').value;
+  const attack_type = document.getElementById('intr-attack-type').value;
+  const max_requests = parseInt(document.getElementById('intr-max-req').value) || 200;
+  const concurrency = parseInt(document.getElementById('intr-concurrency').value) || 10;
+  if (!url) return;
+  const payload_sets = [];
+  for (let i = 1; i <= _intrPayloadSets; i++) {
+    const ta = document.getElementById('intr-payloads-' + i);
+    if (ta && ta.value.trim()) {
+      payload_sets.push(ta.value.trim().split('\n').filter(Boolean));
+    }
+  }
+  if (!payload_sets.length) { alert('Add at least one payload'); return; }
+  const btn = document.getElementById('intr-run-btn');
+  btn.disabled = true; btn.textContent = 'Running...';
+  const r = await fetch('/api/intruder/run', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({method, url, body_template, attack_type, payload_sets, max_requests, concurrency})
+  }).catch(()=>null);
+  btn.disabled = false; btn.textContent = '▶ Attack';
+  if (!r?.ok) { document.getElementById('intr-results').innerHTML = '<div class="card text-red">Request failed</div>'; return; }
+  const d = await r.json();
+  if (d.error) { document.getElementById('intr-results').innerHTML = `<div class="card text-red">${esc(d.error)}</div>`; return; }
+  renderIntruderResults(d);
+}
+
+function renderIntruderResults(d) {
+  const results = d.results || [];
+  const statusGroups = {};
+  results.forEach(r => {
+    const k = r.status || 0;
+    statusGroups[k] = (statusGroups[k]||0) + 1;
+  });
+  const summary = Object.entries(statusGroups).sort((a,b)=>b[1]-a[1])
+    .map(([k,v]) => `<span class="badge badge-${k>=200&&k<300?'green':k>=400?'red':'blue'}">${k}: ${v}</span>`).join(' ');
+  const rows = results.slice(0,500).map(r => {
+    const status = r.status || 0;
+    const cls = status>=200&&status<300?'text-green':status>=400?'text-red':'text-blue';
+    const payloadStr = Array.isArray(r.payload) ? r.payload.join(', ') : (r.payload||'');
+    const timeStr = r.time_ms ? (r.time_ms/1000).toFixed(2)+'s' : '-';
+    return `<tr>
+      <td>${r.index??''}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${esc(payloadStr)}">${esc(payloadStr.slice(0,30))}</td>
+      <td class="${cls}">${status||'-'}</td>
+      <td>${r.length||0}</td>
+      <td>${timeStr}</td>
+      <td class="text-muted" style="font-size:11px">${esc((r.error||'').slice(0,40))}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('intr-results').innerHTML = `
+    <div class="card">
+      <div class="card-title">Results — ${results.length} requests (${d.total||0} total) ${summary}</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Payload</th><th>Status</th><th>Length</th><th>Time</th><th>Error</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" class="empty">No results</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── Proxy: Decoder ────────────────────────────────────────────────────────────
+
+async function runDecoder() {
+  const op = document.getElementById('dec-op').value;
+  const method = document.getElementById('dec-method').value;
+  const input = document.getElementById('dec-input').value;
+  const errEl = document.getElementById('dec-error');
+  errEl.textContent = '';
+  let url = '/api/decoder/' + (op==='hash'?'hash':op==='jwt'?'jwt':op==='encode'?'encode':'decode');
+  const body = op==='hash' ? {data:input, algorithm:method} :
+               op==='jwt'  ? {token:input} :
+                              {data:input, method};
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).catch(()=>null);
+  if (!r?.ok) { errEl.textContent = 'Request failed'; return; }
+  const d = await r.json();
+  if (d.error) { errEl.textContent = d.error; return; }
+  let out = '';
+  if (d.result !== undefined) out = d.result;
+  else if (d.hash) out = d.hash;
+  else if (d.header) out = JSON.stringify(d, null, 2);
+  document.getElementById('dec-output').value = out;
+}
+
+async function detectEncoding() {
+  const input = document.getElementById('dec-input').value;
+  const r = await fetch('/api/decoder/detect', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({data:input})}).catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const el = document.getElementById('dec-detect');
+  if (el) el.textContent = (d.likely_encodings||[]).join(', ') || 'Unknown';
+}
+
+function swapDecoder() {
+  const inp = document.getElementById('dec-input');
+  const out = document.getElementById('dec-output');
+  const tmp = inp.value;
+  inp.value = out.value;
+  out.value = tmp;
+}
+
+// ── Proxy: Comparer ───────────────────────────────────────────────────────────
+
+async function runComparer() {
+  const left = document.getElementById('cmp-left').value;
+  const right = document.getElementById('cmp-right').value;
+  const mode = document.getElementById('cmp-mode').value;
+  if (!left && !right) return;
+  const r = await fetch('/api/comparer/compare', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({left, right, mode})}).catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  document.getElementById('cmp-left-diff').innerHTML = d.left_html || '';
+  document.getElementById('cmp-right-diff').innerHTML = d.right_html || '';
+  document.getElementById('cmp-stats').textContent =
+    `Similarity: ${(d.similarity*100).toFixed(1)}%  +${d.added}  -${d.removed}  =${d.unchanged}  Δlen: ${d.len_diff}`;
+  const style = document.getElementById('diff-style') || (() => {
+    const s = document.createElement('style');
+    s.id = 'diff-style';
+    document.head.appendChild(s);
+    return s;
+  })();
+  style.textContent = '.diff-del{background:#ff4d4d33;color:#ff6b6b} .diff-add{background:#22c55e33;color:#4ade80}';
+}
+
+// ── Proxy: Spider ─────────────────────────────────────────────────────────────
+
+async function runSpider() {
+  const url = document.getElementById('spider-url').value.trim();
+  const max_pages = parseInt(document.getElementById('spider-max-pages').value) || 30;
+  const max_depth = parseInt(document.getElementById('spider-max-depth').value) || 3;
+  if (!url) return;
+  const btn = document.getElementById('spider-btn');
+  btn.disabled = true; btn.textContent = 'Crawling...';
+  document.getElementById('spider-result').innerHTML = '<div class="card"><div class="spinner"></div> Crawling...</div>';
+  const r = await fetch('/api/spider/crawl', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url, max_pages, max_depth})}).catch(()=>null);
+  btn.disabled = false; btn.textContent = '🕷 Crawl';
+  if (!r?.ok) { document.getElementById('spider-result').innerHTML = '<div class="card text-red">Error</div>'; return; }
+  const d = await r.json();
+  if (d.error) { document.getElementById('spider-result').innerHTML = `<div class="card text-red">${esc(d.error)}</div>`; return; }
+  const pages = d.results || [];
+  const rows = pages.slice(0,200).map(p => `<tr>
+    <td class="text-blue" style="max-width:280px;overflow:hidden;text-overflow:ellipsis"><a href="${esc(p.url)}" target="_blank">${esc(p.url.slice(0,80))}</a></td>
+    <td>${p.depth||0}</td>
+    <td class="${p.status_code<300?'text-green':p.status_code<400?'text-blue':'text-red'}">${p.status_code||'-'}</td>
+    <td class="text-muted">${esc((p.content_type||'').split(';')[0])}</td>
+    <td>${p.forms_count||0}</td>
+    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${esc(p.title||'')}</td>
+  </tr>`).join('');
+  document.getElementById('spider-result').innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">Crawl: ${esc(d.base_url||url)} — ${d.pages_crawled||0} pages</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Found: ${d.pages_found||0} | Forms: ${(d.all_forms||[]).length} | Errors: ${(d.errors||[]).length}</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>URL</th><th>Depth</th><th>Status</th><th>Type</th><th>Forms</th><th>Title</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" class="empty">No pages</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+  loadSpiderHistory();
+}
+
+async function loadSpiderHistory() {
+  const r = await fetch('/api/spider/history').catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const el = document.getElementById('spider-history-body');
+  if (!el) return;
+  if (!d.length) { el.innerHTML = '<div class="empty">No crawls yet</div>'; return; }
+  const grouped = {};
+  d.forEach(row => { grouped[row.base_url] = (grouped[row.base_url]||0)+1; });
+  el.innerHTML = Object.entries(grouped).map(([url, cnt]) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span class="text-blue" style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(url)}</span>
+      <span class="badge badge-blue">${cnt} pages</span>
+      <button class="btn btn-ghost btn-sm" onclick="loadSpiderResults('${esc(url)}')">View</button>
+    </div>`).join('');
+}
+
+async function loadSpiderResults(url) {
+  const r = await fetch('/api/spider/results', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})}).catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const rows = (d.results||[]).slice(0,200).map(p => `<tr>
+    <td class="text-blue">${esc(p.url||'')}</td>
+    <td>${p.depth||0}</td>
+    <td>${p.status_code||'-'}</td>
+    <td>${esc(p.title||'')}</td>
+  </tr>`).join('');
+  document.getElementById('spider-result').innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">Stored: ${esc(url)}</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>URL</th><th>Depth</th><th>Status</th><th>Title</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="4" class="empty">No pages</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── DPI: Display Filter ───────────────────────────────────────────────────────
+
+function showDPISubTab(name) {
+  ['filter','stats','udp','expert'].forEach(t => {
+    document.getElementById('dtab-'+t).style.display = t===name ? '' : 'none';
+    const btn = document.getElementById('dtab-'+t+'-btn');
+    if (btn) btn.classList.toggle('active', t===name);
+  });
+}
+
+async function applyDPIFilter() {
+  const expr = document.getElementById('dpi-filter-expr').value.trim();
+  if (!expr) return;
+  const r = await fetch('/api/dpi/filter', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({expression:expr})}).catch(()=>null);
+  if (!r?.ok) { document.getElementById('dpi-filter-stats').textContent = 'Error applying filter'; return; }
+  const d = await r.json();
+  if (d.error) { document.getElementById('dpi-filter-stats').textContent = 'Error: ' + d.error; return; }
+  const pkts = d.packets || [];
+  document.getElementById('dpi-filter-count').textContent = pkts.length + ' / ' + (d.total_inspected||0);
+  document.getElementById('dpi-filter-stats').textContent = `Filter matched ${pkts.length} of ${d.total_inspected||0} packets`;
+  const tbody = document.getElementById('dpi-filter-body');
+  if (!pkts.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No packets match</td></tr>'; return; }
+  tbody.innerHTML = pkts.slice(0,500).map(p => {
+    const t = new Date(p.timestamp*1000).toLocaleTimeString();
+    return `<tr>
+      <td class="text-muted">${t}</td>
+      <td class="text-blue">${esc(p.src_ip||'')}</td>
+      <td class="text-blue">${esc(p.dst_ip||'')}</td>
+      <td>${esc(p.protocol||'')}</td>
+      <td>${p.src_port||''}</td>
+      <td>${p.dst_port||''}</td>
+      <td class="text-muted">${esc(p.tcp?.flags||'')}</td>
+      <td>${p.ip?.len||''}</td>
+      <td class="text-muted" style="font-size:11px">${esc((p.summary||'').slice(0,60))}</td>
+    </tr>`;
+  }).join('');
+}
+
+function clearDPIFilter() {
+  document.getElementById('dpi-filter-expr').value = '';
+  document.getElementById('dpi-filter-count').textContent = '';
+  document.getElementById('dpi-filter-stats').textContent = '';
+  document.getElementById('dpi-filter-body').innerHTML = '<tr><td colspan="9" class="empty">Run a filter to see results</td></tr>';
+}
+
+// ── DPI: Protocol Stats ───────────────────────────────────────────────────────
+
+async function loadProtoStats(type) {
+  const el = document.getElementById('proto-stats-body');
+  el.innerHTML = '<div class="spinner"></div>';
+  const r = await fetch('/api/dpi/stats', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type})}).catch(()=>null);
+  if (!r?.ok) { el.innerHTML = '<div class="empty">Error</div>'; return; }
+  const d = await r.json();
+  if (d.error) { el.innerHTML = `<div class="empty text-red">${esc(d.error)}</div>`; return; }
+  const data = d.data || [];
+  if (!data.length) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+  if (type === 'hierarchy') {
+    el.innerHTML = `<div class="card"><div class="card-title">Protocol Hierarchy</div>
+      <table class="data-table"><thead><tr><th>Protocol</th><th>Packets</th><th>Bytes</th><th>% Pkts</th><th>% Bytes</th></tr></thead>
+      <tbody>${data.map(p=>`<tr><td class="text-blue">${esc(p.protocol)}</td><td>${p.count}</td><td>${p.bytes}</td><td>${p.pct_packets?.toFixed(1)}%</td><td>${p.pct_bytes?.toFixed(1)}%</td></tr>`).join('')}</tbody></table></div>`;
+  } else if (type === 'conversations') {
+    el.innerHTML = `<div class="card"><div class="card-title">Conversations (IP Pairs)</div>
+      <table class="data-table"><thead><tr><th>Address A</th><th>Address B</th><th>Pkts A→B</th><th>Pkts B→A</th><th>Bytes A→B</th><th>Bytes B→A</th><th>Protocols</th></tr></thead>
+      <tbody>${data.map(c=>`<tr><td class="text-blue">${esc(c.ip_a)}</td><td class="text-blue">${esc(c.ip_b)}</td><td>${c.packets_a_b}</td><td>${c.packets_b_a}</td><td>${c.bytes_a_b}</td><td>${c.bytes_b_a}</td><td class="text-muted">${(c.protocols||[]).join(', ')}</td></tr>`).join('')}</tbody></table></div>`;
+  } else if (type === 'endpoints') {
+    el.innerHTML = `<div class="card"><div class="card-title">Endpoints</div>
+      <table class="data-table"><thead><tr><th>IP</th><th>Sent Pkts</th><th>Recv Pkts</th><th>Sent Bytes</th><th>Recv Bytes</th><th>Protocols</th></tr></thead>
+      <tbody>${data.map(e=>`<tr><td class="text-blue">${esc(e.ip)}</td><td>${e.packets_sent}</td><td>${e.packets_recv}</td><td>${e.bytes_sent}</td><td>${e.bytes_recv}</td><td class="text-muted">${(e.protocols||[]).join(', ')}</td></tr>`).join('')}</tbody></table></div>`;
+  } else if (type === 'io_graph') {
+    const rows = data.map(b=>`<tr><td>${new Date(b.t*1000).toLocaleTimeString()}</td><td>${b.packets}</td><td>${b.bytes}</td></tr>`).join('');
+    el.innerHTML = `<div class="card"><div class="card-title">I/O Graph (per second)</div>
+      <table class="data-table"><thead><tr><th>Time</th><th>Packets</th><th>Bytes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } else if (type === 'services') {
+    el.innerHTML = `<div class="card"><div class="card-title">Service Statistics</div>
+      <table class="data-table"><thead><tr><th>Port</th><th>Service</th><th>Count</th></tr></thead>
+      <tbody>${data.map(s=>`<tr><td>${s.port}</td><td class="text-blue">${esc(s.service)}</td><td>${s.count}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+}
+
+// ── DPI: UDP Streams ──────────────────────────────────────────────────────────
+
+async function loadUDPStreams() {
+  const r = await fetch('/api/dpi/udp/streams').catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const streams = d.streams || [];
+  const tbody = document.getElementById('udp-streams-body');
+  if (!streams.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No UDP streams</td></tr>'; return; }
+  tbody.innerHTML = streams.map(s => `<tr>
+    <td class="text-blue">${esc(s.src_ip)}</td>
+    <td class="text-blue">${esc(s.dst_ip)}</td>
+    <td>${s.src_port}</td>
+    <td>${s.dst_port}</td>
+    <td>${s.datagrams}</td>
+    <td>${s.bytes_total}</td>
+    <td class="text-muted">${new Date(s.updated*1000).toLocaleTimeString()}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="viewUDPStream('${esc(s.src_ip)}','${esc(s.dst_ip)}',${s.src_port},${s.dst_port})">Follow</button></td>
+  </tr>`).join('');
+}
+
+async function viewUDPStream(src_ip, dst_ip, src_port, dst_port) {
+  const r = await fetch(`/api/dpi/udp/streams?src_ip=${src_ip}&dst_ip=${dst_ip}&src_port=${src_port}&dst_port=${dst_port}`).catch(()=>null);
+  if (!r?.ok) return;
+  const d = await r.json();
+  const stream = d.stream || {};
+  const datagrams = stream.payload || [];
+  const rows = datagrams.map(dg => `<tr>
+    <td class="badge ${dg.direction==='client'?'badge-blue':'badge-green'}">${dg.direction}</td>
+    <td>${new Date(dg.timestamp*1000).toLocaleTimeString()}</td>
+    <td>${dg.length}</td>
+    <td class="text-muted" style="font-family:monospace;font-size:11px;max-width:300px;overflow:hidden">${esc((dg.data||'').slice(0,120))}</td>
+    <td class="text-muted" style="font-family:monospace;font-size:10px">${esc((dg.hex||'').slice(0,48))}</td>
+  </tr>`).join('');
+  document.getElementById('udp-stream-detail').innerHTML = `
+    <div class="card mt8">
+      <div class="card-title">UDP Stream: ${src_ip}:${src_port} → ${dst_ip}:${dst_port}</div>
+      <table class="data-table">
+        <thead><tr><th>Dir</th><th>Time</th><th>Len</th><th>Data</th><th>Hex</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5" class="empty">No datagrams</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── DPI: Expert Info ──────────────────────────────────────────────────────────
+
+async function loadExpertInfo() {
+  const el = document.getElementById('expert-info-body');
+  el.innerHTML = '<div class="spinner"></div>';
+  const r = await fetch('/api/dpi/stats', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'expert'})}).catch(()=>null);
+  if (!r?.ok) { el.innerHTML = '<div class="empty">Error</div>'; return; }
+  const d = await r.json();
+  const items = d.data || [];
+  if (!items.length) { el.innerHTML = '<div class="empty">No anomalies detected</div>'; return; }
+  const sevColor = {CRITICAL:'text-red', HIGH:'text-orange', WARNING:'text-yellow', INFO:'text-muted'};
+  el.innerHTML = items.map(item => `
+    <div style="padding:8px;margin-bottom:6px;border-left:3px solid ${item.severity==='CRITICAL'?'#ef4444':item.severity==='HIGH'?'#f97316':item.severity==='WARNING'?'#eab308':'#6b7280'};background:var(--surface2);border-radius:0 4px 4px 0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge ${item.severity==='CRITICAL'?'badge-red':item.severity==='HIGH'?'badge-orange':'badge-blue'}">${esc(item.severity)}</span>
+        <strong>${esc(item.type)}</strong>
+      </div>
+      <div style="margin-top:4px;font-size:13px">${esc(item.description)}</div>
+      ${item.details ? `<div style="margin-top:4px;font-size:11px;color:var(--muted)">${esc(JSON.stringify(item.details))}</div>` : ''}
+    </div>`).join('');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Recon tab
+// ──────────────────────────────────────────────────────────────────────────────
+function showReconSub(name) {
+  document.querySelectorAll('.recon-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.recon-sub').forEach(b => { b.classList.remove('active','btn-blue'); b.classList.add('btn-ghost'); });
+  const panel = document.getElementById('recon-panel-' + name);
+  if (panel) panel.style.display = '';
+  const btn = document.querySelector(`.recon-sub[data-rsub="${name}"]`);
+  if (btn) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-blue','active'); }
+}
+
+async function runSubdomainEnum() {
+  const domain = document.getElementById('recon-sub-domain').value.trim();
+  if (!domain) return;
+  const msg = document.getElementById('recon-sub-msg');
+  const body2 = document.getElementById('recon-sub-body');
+  msg.textContent = 'Enumerating…'; body2.innerHTML = '<tr><td colspan="6" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/subdomains', {
+      domain,
+      probe_http: document.getElementById('recon-sub-probe').checked,
+      bruteforce: document.getElementById('recon-sub-brute').checked,
+    });
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    document.getElementById('recon-sub-summary').textContent =
+      `${r.total} found, ${r.live} live — ${r.elapsed_s}s`;
+    msg.textContent = '';
+    if (!r.subdomains || !r.subdomains.length) {
+      body2.innerHTML = '<tr><td colspan="6" class="empty">No subdomains found</td></tr>'; return;
+    }
+    body2.innerHTML = r.subdomains.map(s => `<tr>
+      <td>${esc(s.subdomain)}</td>
+      <td style="font-size:12px">${esc((s.ips||[]).join(', '))}</td>
+      <td>${s.live ? '<span class="badge badge-green">LIVE</span>' : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-size:12px">${esc(s.title||'')}</td>
+      <td style="font-size:12px">${esc(s.server||'')}</td>
+      <td style="font-size:12px">${esc(s.source||'')}</td>
+    </tr>`).join('');
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runDNSLookup() {
+  const domain = document.getElementById('recon-dns-domain').value.trim();
+  if (!domain) return;
+  const msg = document.getElementById('recon-dns-msg');
+  const result = document.getElementById('recon-dns-result');
+  msg.textContent = 'Looking up…';
+  try {
+    const r = await post('/api/recon/dns', {domain});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `Done in ${r.elapsed_s}s`;
+    let html = '<div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Records</th></tr></thead><tbody>';
+    for (const [type, vals] of Object.entries(r.records||{})) {
+      const valStr = Array.isArray(vals) ? vals.map(v => typeof v === 'object' ? JSON.stringify(v) : v).join('<br>') : esc(String(vals));
+      html += `<tr><td><strong>${esc(type)}</strong></td><td style="font-size:12px;font-family:monospace">${valStr}</td></tr>`;
+    }
+    for (const [type, err] of Object.entries(r.errors||{})) {
+      html += `<tr><td>${esc(type)}</td><td style="color:var(--muted);font-size:12px">${esc(err)}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+    result.innerHTML = html;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runZoneTransfer() {
+  const domain = document.getElementById('recon-dns-domain').value.trim();
+  if (!domain) return;
+  const msg = document.getElementById('recon-dns-msg');
+  const result = document.getElementById('recon-dns-result');
+  msg.textContent = 'Attempting zone transfer…';
+  try {
+    const r = await post('/api/recon/dns/zone', {domain});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = r.success ? '✓ Zone transfer succeeded!' : 'Zone transfer failed (secure)';
+    let html = `<div class="text-muted" style="font-size:13px;margin-bottom:8px">Nameservers: ${esc((r.nameservers||[]).join(', '))}</div>`;
+    for (const [ns, res] of Object.entries(r.results||{})) {
+      html += `<div style="font-size:12px;margin-bottom:4px"><strong>${esc(ns)}</strong>: `;
+      if (res.error) html += `<span style="color:var(--muted)">${esc(res.error)}</span>`;
+      else html += `<span style="color:var(--green)">${res.record_count} records</span>`;
+      html += '</div>';
+    }
+    result.innerHTML = html;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runWayback() {
+  const domain = document.getElementById('recon-wb-domain').value.trim();
+  if (!domain) return;
+  const msg = document.getElementById('recon-wb-msg');
+  const body2 = document.getElementById('recon-wb-body');
+  msg.textContent = 'Fetching Wayback URLs…';
+  body2.innerHTML = '<tr><td colspan="5" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/wayback', {
+      domain,
+      limit: parseInt(document.getElementById('recon-wb-limit').value)||2000,
+      from_year: parseInt(document.getElementById('recon-wb-from').value)||null,
+      to_year: parseInt(document.getElementById('recon-wb-to').value)||null,
+    });
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    document.getElementById('recon-wb-summary').textContent =
+      `${r.total} URLs, ${r.interesting_count} interesting — ${r.elapsed_s}s`;
+    msg.textContent = '';
+    if (!r.urls || !r.urls.length) {
+      body2.innerHTML = '<tr><td colspan="5" class="empty">No URLs found</td></tr>'; return;
+    }
+    body2.innerHTML = r.urls.slice(0,500).map(u => `<tr>
+      <td style="font-size:11px;font-family:monospace;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(u.url)}" target="_blank" rel="noopener">${esc(u.url)}</a>
+      </td>
+      <td style="font-size:11px">${esc(u.timestamp||'')}</td>
+      <td>${u.status||'—'}</td>
+      <td style="font-size:11px">${esc(u.mimetype||'')}</td>
+      <td style="font-size:11px">${(u.tags||[]).map(t=>`<span class="badge badge-blue">${esc(t)}</span>`).join(' ')}</td>
+    </tr>`).join('');
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runFavicon() {
+  const url = document.getElementById('recon-fav-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-fav-msg');
+  const result = document.getElementById('recon-fav-result');
+  msg.textContent = 'Fetching favicon…';
+  try {
+    const r = await post('/api/recon/favicon', {url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `Done in ${r.elapsed_s}s`;
+    result.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:600px">
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">Favicon URL</div>
+        <div style="font-size:13px;word-break:break-all">${esc(r.favicon_url||'')}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">MD5</div>
+        <div style="font-family:monospace;font-size:13px">${esc(r.md5||'')}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">MurmurHash3 (Shodan)</div>
+        <div style="font-family:monospace;font-size:13px">${r.mmh3}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">Shodan Query</div>
+        <div style="font-family:monospace;font-size:12px;color:var(--blue)">${esc(r.shodan_query||'')}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">Size</div>
+        <div>${r.size_bytes} bytes</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="text-muted" style="font-size:12px">Content-Type</div>
+        <div style="font-size:13px">${esc(r.content_type||'')}</div>
+      </div>
+    </div>`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runReverseIP() {
+  const ip = document.getElementById('recon-rip-ip').value.trim();
+  if (!ip) return;
+  const msg = document.getElementById('recon-rip-msg');
+  const result = document.getElementById('recon-rip-result');
+  msg.textContent = 'Looking up…';
+  try {
+    const r = await post('/api/recon/reverse_ip', {ip});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.total} domains on ${r.ip} — ${r.elapsed_s}s`;
+    result.innerHTML = `
+      <div class="text-muted" style="font-size:13px;margin-bottom:8px">
+        IP: <strong>${esc(r.ip)}</strong> | PTR: <strong>${esc(r.ptr||'none')}</strong> | Source: ${esc(r.source||'')}
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>Domain</th></tr></thead><tbody>
+        ${(r.domains||[]).map(d=>`<tr><td style="font-family:monospace;font-size:13px">${esc(d)}</td></tr>`).join('')||'<tr><td class="empty">No domains found</td></tr>'}
+      </tbody></table></div>`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runJSAnalyzer() {
+  const url = document.getElementById('recon-js-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-js-msg');
+  const body2 = document.getElementById('recon-js-body');
+  const secretsDiv = document.getElementById('recon-js-secrets');
+  msg.textContent = 'Analyzing JS files…';
+  body2.innerHTML = '<tr><td colspan="5" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/js_files', {url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    document.getElementById('recon-js-summary').textContent =
+      `${r.total_js} JS files | ${r.total_secrets} secrets | ${r.total_endpoints} endpoints — ${r.elapsed_s}s`;
+    msg.textContent = '';
+    body2.innerHTML = (r.js_files||[]).map(f => `<tr>
+      <td style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(f.source_url)}" target="_blank" rel="noopener">${esc(f.source_url)}</a>
+      </td>
+      <td>${f.size_bytes ? fmtBytes(f.size_bytes) : '—'}</td>
+      <td>${f.secrets_count>0 ? `<span style="color:var(--red);font-weight:bold">${f.secrets_count}</span>` : '0'}</td>
+      <td>${f.endpoints_count||0}</td>
+      <td style="font-size:11px">${(f.internal_ips||[]).join(', ')}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">No JS files found</td></tr>';
+
+    if (r.all_secrets && r.all_secrets.length) {
+      secretsDiv.innerHTML = `<div class="section-title" style="color:var(--red)">Secrets Found (${r.all_secrets.length})</div>` +
+        r.all_secrets.slice(0,50).map(s=>`<div style="font-size:12px;font-family:monospace;background:rgba(239,68,68,.08);padding:4px 8px;margin-bottom:2px;border-radius:4px">
+          <span class="badge badge-red">${esc(s.type)}</span> L${s.line}: ${esc(s.value)}
+        </div>`).join('');
+    } else secretsDiv.innerHTML = '';
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runASN() {
+  const query = document.getElementById('recon-asn-query').value.trim();
+  if (!query) return;
+  const msg = document.getElementById('recon-asn-msg');
+  const result = document.getElementById('recon-asn-result');
+  msg.textContent = 'Looking up…';
+  try {
+    const r = await post('/api/recon/asn', {query});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `Done in ${r.elapsed_s}s`;
+    result.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:700px">
+      ${[['IP',r.ip],['ASN',r.asn],['Organization',r.org],['Country',r.country],['Region',r.region],['City',r.city],
+         ['Hostname',r.hostname],['Timezone',r.timezone],['Source',r.source]]
+        .map(([k,v])=>`<div class="card" style="padding:10px"><div class="text-muted" style="font-size:11px">${esc(k)}</div>
+          <div style="font-size:13px">${esc(v||'—')}</div></div>`).join('')}
+    </div>
+    ${r.prefixes && r.prefixes.length ? `<div class="section-title" style="margin-top:12px">BGP Prefixes (${r.prefixes.length})</div>
+      <div style="font-family:monospace;font-size:12px">${r.prefixes.map(p=>esc(p)).join(', ')}</div>` : ''}`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runEmailHarvest() {
+  const url = document.getElementById('recon-em-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-em-msg');
+  const body2 = document.getElementById('recon-em-body');
+  msg.textContent = 'Harvesting emails…';
+  body2.innerHTML = '<tr><td colspan="3" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/emails', {
+      url, max_pages: parseInt(document.getElementById('recon-em-pages').value)||20
+    });
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.total} emails from ${r.pages_crawled} pages — ${r.elapsed_s}s`;
+    if (!r.emails || !r.emails.length) {
+      body2.innerHTML = '<tr><td colspan="3" class="empty">No emails found</td></tr>'; return;
+    }
+    body2.innerHTML = r.emails.map(e => `<tr>
+      <td style="font-family:monospace">${esc(e.email)}</td>
+      <td style="font-size:11px">${(e.sources||[]).slice(0,2).map(s=>esc(s)).join('<br>')}</td>
+      <td>${e.count}</td>
+    </tr>`).join('');
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runHTTPProbe() {
+  const raw = document.getElementById('recon-probe-targets').value.trim();
+  if (!raw) return;
+  const targets = raw.split('\n').map(t=>t.trim()).filter(Boolean);
+  const msg = document.getElementById('recon-probe-msg');
+  const body2 = document.getElementById('recon-probe-body');
+  msg.textContent = `Probing ${targets.length} hosts…`;
+  body2.innerHTML = '<tr><td colspan="7" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/http_probe', {targets});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.live_count}/${r.total} live — ${r.elapsed_s}s`;
+    body2.innerHTML = (r.results||[]).map(res => `<tr>
+      <td style="font-size:12px">${esc(res.target)}</td>
+      <td>${res.status ? `<span class="badge ${res.status<300?'badge-green':res.status<400?'badge-blue':'badge-red'}">${res.status}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(res.title||'')}</td>
+      <td style="font-size:12px">${esc(res.server||'')}</td>
+      <td>${res.response_time_ms||'—'}</td>
+      <td>${res.has_hsts ? '✓' : '✗'}</td>
+      <td>${res.has_csp ? '✓' : '✗'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">No results</td></tr>';
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runSecurityHeaders() {
+  const url = document.getElementById('recon-sh-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-sh-msg');
+  const result = document.getElementById('recon-sh-result');
+  msg.textContent = 'Analyzing…';
+  try {
+    const r = await post('/api/recon/security_headers', {url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    const gradeColor = {A:' #10b981','A+':'#10b981',B:'#f59e0b',C:'#f97316',D:'#ef4444',F:'#ef4444'}[r.grade]||'var(--text)';
+    msg.textContent = `Score: ${r.score}% — Grade: ${r.grade} — ${r.elapsed_s}s`;
+    result.innerHTML = `<div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+      <div style="font-size:48px;font-weight:bold;color:${gradeColor}">${esc(r.grade)}</div>
+      <div><div style="font-size:24px">${r.score}%</div><div class="text-muted">Security Score</div></div>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Header</th><th>Status</th><th>Severity</th><th>Value</th><th>Notes</th></tr></thead><tbody>
+      ${(r.findings||[]).map(f=>`<tr>
+        <td style="font-family:monospace;font-size:12px">${esc(f.header)}</td>
+        <td><span class="badge ${f.status==='PASS'?'badge-green':f.status==='MISSING'?'badge-red':'badge-blue'}">${esc(f.status)}</span></td>
+        <td>${f.severity!=='OK'?`<span class="badge ${f.severity==='HIGH'||f.severity==='CRITICAL'?'badge-red':f.severity==='MEDIUM'?'badge-orange':'badge-blue'}">${esc(f.severity)}</span>`:'<span style="color:var(--green)">OK</span>'}</td>
+        <td style="font-size:11px;font-family:monospace;max-width:200px;overflow:hidden;text-overflow:ellipsis">${esc(f.value||'—')}</td>
+        <td style="font-size:11px">${(f.issues||[]).join('; ')||esc(f.description||'')}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runTechDetect() {
+  const url = document.getElementById('recon-tech-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-tech-msg');
+  const result = document.getElementById('recon-tech-result');
+  msg.textContent = 'Detecting…';
+  try {
+    const r = await post('/api/recon/tech', {url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.total} technologies detected — ${r.elapsed_s}s`;
+    const catColors = {'Web Server':'#6366f1','CDN':'#8b5cf6','Language':'#3b82f6','Framework':'#06b6d4',
+      'CMS':'#10b981','E-Commerce':'#f59e0b','JS Framework':'#f97316','JS Library':'#ef4444',
+      'CSS Framework':'#ec4899','Analytics':'#84cc16','WAF':'#dc2626','Hosting':'#64748b'};
+    result.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+        ${(r.technologies||[]).map(t=>`<span class="badge" style="background:${catColors[t.category]||'#6b7280'}22;color:${catColors[t.category]||'#6b7280'};border:1px solid ${catColors[t.category]||'#6b7280'}44;font-size:13px">
+          ${esc(t.name)} <span style="font-size:10px;opacity:.7">${esc(t.category)}</span>
+        </span>`).join('')||'<span class="text-muted">No technologies detected</span>'}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        ${[['Server',r.server],['Powered By',r.powered_by],['Generator',r.generator]]
+          .filter(([,v])=>v).map(([k,v])=>`<div class="card" style="padding:10px">
+            <div class="text-muted" style="font-size:11px">${esc(k)}</div>
+            <div style="font-size:13px">${esc(v)}</div></div>`).join('')}
+      </div>`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runBrokenLinks() {
+  const url = document.getElementById('recon-bl-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-bl-msg');
+  const body2 = document.getElementById('recon-bl-body');
+  msg.textContent = 'Crawling and checking links…';
+  body2.innerHTML = '<tr><td colspan="4" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/broken_links', {
+      url, max_pages: parseInt(document.getElementById('recon-bl-pages').value)||20
+    });
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    document.getElementById('recon-bl-summary').textContent =
+      `${r.broken_count} broken / ${r.total_checked} checked — ${r.pages_crawled} pages crawled — ${r.elapsed_s}s`;
+    msg.textContent = '';
+    if (!r.broken_links || !r.broken_links.length) {
+      body2.innerHTML = '<tr><td colspan="4" class="empty">No broken links found</td></tr>'; return;
+    }
+    body2.innerHTML = r.broken_links.map(l => `<tr>
+      <td style="font-size:11px;font-family:monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a>
+      </td>
+      <td><span class="badge badge-red">${l.status||l.error||'err'}</span></td>
+      <td>${l.external ? '<span class="badge badge-orange">EXT</span>' : '—'}</td>
+      <td style="font-size:11px">${(l.found_on||[]).slice(0,1).map(s=>esc(s)).join('<br>')}</td>
+    </tr>`).join('');
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
 }
 </script>
 </body>

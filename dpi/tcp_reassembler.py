@@ -158,3 +158,130 @@ class TCPReassembler:
                 stale = [k for k, s in self._streams.items() if s.updated < cutoff]
                 for k in stale:
                     del self._streams[k]
+
+
+# ── UDP Stream Tracker ────────────────────────────────────────────────────────
+
+_MAX_UDP_STREAMS = 500
+_UDP_TTL = 60
+
+
+class UDPStream:
+    def __init__(self, key: tuple):
+        self.key = key       # (src_ip, dst_ip, src_port, dst_port)
+        self.created = time.time()
+        self.updated = time.time()
+        self.datagrams: list = []
+        self.bytes_total = 0
+
+    def add_datagram(self, direction: str, payload: bytes, dns_info: dict = None):
+        self.updated = time.time()
+        self.bytes_total += len(payload)
+        entry = {
+            "direction": direction,
+            "timestamp": self.updated,
+            "length": len(payload),
+            "data": payload.decode(errors="replace")[:256],
+            "hex": payload.hex()[:64],
+        }
+        if dns_info:
+            entry["dns"] = dns_info
+        self.datagrams.append(entry)
+        # Keep last 200 datagrams per stream
+        if len(self.datagrams) > 200:
+            self.datagrams = self.datagrams[-200:]
+
+    def to_dict(self) -> dict:
+        src_ip, dst_ip, src_port, dst_port = self.key
+        return {
+            "src_ip": src_ip, "dst_ip": dst_ip,
+            "src_port": src_port, "dst_port": dst_port,
+            "datagrams": len(self.datagrams),
+            "bytes_total": self.bytes_total,
+            "created": self.created,
+            "updated": self.updated,
+            "payload": self.datagrams,
+        }
+
+
+class UDPTracker:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self._streams: OrderedDict = OrderedDict()
+        self._stream_lock = threading.Lock()
+        self._cleanup_thread = threading.Thread(
+            target=self._cleanup_loop, daemon=True, name="UDP-Tracker"
+        )
+        self._cleanup_thread.start()
+
+    @classmethod
+    def get(cls) -> "UDPTracker":
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+
+    def process_packet(self, pkt_info: dict):
+        """Feed a dissected UDP packet dict."""
+        if pkt_info.get("protocol") != "UDP":
+            return
+        udp = pkt_info.get("udp", {})
+        if not udp:
+            return
+        src_ip = pkt_info.get("src_ip", "")
+        dst_ip = pkt_info.get("dst_ip", "")
+        src_port = udp.get("src_port", 0)
+        dst_port = udp.get("dst_port", 0)
+        if not src_ip or not dst_ip:
+            return
+
+        fwd = (src_ip, dst_ip, src_port, dst_port)
+        rev = (dst_ip, src_ip, dst_port, src_port)
+
+        with self._stream_lock:
+            if fwd in self._streams:
+                key, direction = fwd, "client"
+            elif rev in self._streams:
+                key, direction = rev, "server"
+            else:
+                key, direction = fwd, "client"
+                if len(self._streams) >= _MAX_UDP_STREAMS:
+                    self._streams.popitem(last=False)
+                self._streams[key] = UDPStream(key)
+
+            dns = pkt_info.get("dns")
+            payload = b""
+            if dns:
+                q = dns.get("questions", [])
+                a = dns.get("answers", [])
+                payload_str = f"Q:{q} A:{a}"
+                payload = payload_str.encode()
+            self._streams[key].add_datagram(direction, payload, dns_info=dns)
+
+    def get_all_streams(self, limit: int = 100) -> list:
+        with self._stream_lock:
+            streams = list(self._streams.values())
+        streams.sort(key=lambda s: s.updated, reverse=True)
+        return [s.to_dict() for s in streams[:limit]]
+
+    def get_stream(self, src_ip: str, dst_ip: str, src_port: int, dst_port: int) -> dict:
+        key = (src_ip, dst_ip, src_port, dst_port)
+        rev = (dst_ip, src_ip, dst_port, src_port)
+        with self._stream_lock:
+            if key in self._streams:
+                return self._streams[key].to_dict()
+            if rev in self._streams:
+                return self._streams[rev].to_dict()
+        return {}
+
+    def _cleanup_loop(self):
+        while True:
+            time.sleep(30)
+            cutoff = time.time() - _UDP_TTL
+            with self._stream_lock:
+                stale = [k for k, s in self._streams.items() if s.updated < cutoff]
+                for k in stale:
+                    del self._streams[k]

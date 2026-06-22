@@ -531,6 +531,557 @@ def _parse_version_from_banner(banner: str) -> str:
 
 # ── Port parser ───────────────────────────────────────────────────────────────
 
+# ── Nmap Top Ports list (from nmap-services) ──────────────────────────────────
+
+_TOP_PORTS_1000 = [
+    80, 23, 443, 21, 22, 25, 3389, 110, 445, 139, 143, 53, 135, 3306, 8080,
+    1723, 111, 995, 993, 5900, 1025, 587, 8888, 199, 1720, 465, 548, 113,
+    81, 6001, 10000, 514, 5060, 179, 1026, 2000, 8443, 8000, 32768, 554,
+    26, 1433, 49152, 2001, 515, 8008, 49154, 1027, 5666, 646, 5000, 5631,
+    631, 49153, 8081, 2049, 88, 79, 5800, 106, 2121, 1110, 49155, 6000,
+    513, 990, 5357, 427, 49156, 543, 544, 5101, 144, 7, 389, 8009, 3128,
+    444, 9999, 5009, 7070, 5190, 3000, 5432, 1900, 3986, 13, 1029, 9,
+    5051, 6646, 49157, 1028, 873, 1755, 2717, 4899, 9100, 119, 37,
+]
+
+_TOP_PORTS_100 = _TOP_PORTS_1000[:100]
+
+
+def top_ports_scan(host: str, n: int = 100, timing: int = 3,
+                   banner: bool = True, os_detect: bool = False) -> dict:
+    """Scan the N most common TCP ports (Nmap --top-ports equivalent)."""
+    ports = list(dict.fromkeys(_TOP_PORTS_1000[:max(1, min(n, 1000))]))
+    ports_str = ",".join(str(p) for p in ports)
+    return port_scan(host, ports_str, timing=timing, banner=banner, os_detect=os_detect)
+
+
+# ── Stealth / raw-socket scans (Scapy-based, require root/Administrator) ──────
+
+def _scapy_scan(host: str, ports: list, flags: str, timeout: float = 2.0) -> dict:
+    """Generic Scapy TCP scan with custom flags."""
+    try:
+        from scapy.all import IP, TCP, sr, conf
+        conf.verb = 0
+    except ImportError:
+        return {"error": "Scapy not installed"}
+    except Exception as e:
+        return {"error": str(e)}
+
+    import socket
+    try:
+        host_ip = socket.gethostbyname(host)
+    except Exception as e:
+        return {"error": f"DNS lookup failed: {e}"}
+
+    open_ports = []
+    closed_ports = []
+    filtered_ports = []
+
+    try:
+        pkts = [IP(dst=host_ip) / TCP(dport=p, flags=flags) for p in ports[:500]]
+        answered, unanswered = sr(pkts, timeout=timeout, verbose=False)
+
+        for sent, received in answered:
+            tcp = received.getlayer(TCP) if received.haslayer(TCP) else None
+            if tcp is None:
+                continue
+            port = sent[TCP].dport
+            tcp_flags = str(tcp.flags)
+            if "S" in tcp_flags and "A" in tcp_flags:
+                open_ports.append(port)
+            elif "R" in tcp_flags:
+                closed_ports.append(port)
+
+        for pkt in unanswered:
+            filtered_ports.append(pkt[TCP].dport)
+
+        from utils.service_detector import get_service
+        result = {
+            "host": host, "host_ip": host_ip,
+            "scan_type": flags,
+            "open": [{"port": p, "service": get_service(p)} for p in sorted(open_ports)],
+            "closed": len(closed_ports),
+            "filtered": len(filtered_ports),
+            "scanned": len(ports),
+        }
+        return result
+    except PermissionError:
+        return {"error": "Raw socket scans require Administrator/root privileges"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def syn_scan(host: str, ports: str = "1-1024", timing: int = 3) -> dict:
+    """Stealth SYN scan (-sS equivalent). Requires root/Administrator."""
+    timeout, _ = _TIMING.get(timing, (0.5, 150))
+    port_list = _parse_ports(ports)
+    if len(port_list) > 10000:
+        return {"error": "Max 10000 ports per scan"}
+    return _scapy_scan(host, port_list, "S", timeout)
+
+
+def null_scan(host: str, ports: str = "1-1024") -> dict:
+    """TCP NULL scan (no flags, -sN). Requires root/Administrator."""
+    return _scapy_scan(host, _parse_ports(ports), "", 2.0)
+
+
+def fin_scan(host: str, ports: str = "1-1024") -> dict:
+    """TCP FIN scan (-sF). Requires root/Administrator."""
+    return _scapy_scan(host, _parse_ports(ports), "F", 2.0)
+
+
+def xmas_scan(host: str, ports: str = "1-1024") -> dict:
+    """TCP Xmas scan (FIN+PSH+URG, -sX). Requires root/Administrator."""
+    return _scapy_scan(host, _parse_ports(ports), "FPU", 2.0)
+
+
+def ack_scan(host: str, ports: str = "1-1024") -> dict:
+    """
+    TCP ACK scan (-sA). Detects firewall rules.
+    Unfiltered ports return RST. Filtered ports drop the packet.
+    """
+    try:
+        from scapy.all import IP, TCP, sr, conf
+        conf.verb = 0
+        import socket
+        host_ip = socket.gethostbyname(host)
+        port_list = _parse_ports(ports)[:500]
+        pkts = [IP(dst=host_ip) / TCP(dport=p, flags="A") for p in port_list]
+        answered, unanswered = sr(pkts, timeout=2.0, verbose=False)
+        unfiltered = []
+        filtered = []
+        for sent, recv in answered:
+            if recv.haslayer(TCP) and "R" in str(recv[TCP].flags):
+                unfiltered.append(sent[TCP].dport)
+        for pkt in unanswered:
+            filtered.append(pkt[TCP].dport)
+        return {
+            "host": host, "scan_type": "ACK",
+            "unfiltered": sorted(unfiltered),
+            "filtered": sorted(filtered),
+            "note": "Unfiltered=firewall rule allows port, Filtered=firewall drops ACK packet",
+        }
+    except PermissionError:
+        return {"error": "ACK scan requires Administrator/root privileges"}
+    except ImportError:
+        return {"error": "Scapy not installed"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def window_scan(host: str, ports: str = "1-1024") -> dict:
+    """TCP Window scan (-sW). Like ACK scan but checks TCP window size."""
+    try:
+        from scapy.all import IP, TCP, sr, conf
+        conf.verb = 0
+        import socket
+        host_ip = socket.gethostbyname(host)
+        port_list = _parse_ports(ports)[:500]
+        pkts = [IP(dst=host_ip) / TCP(dport=p, flags="A") for p in port_list]
+        answered, _ = sr(pkts, timeout=2.0, verbose=False)
+        open_ports = []
+        closed_ports = []
+        for sent, recv in answered:
+            if recv.haslayer(TCP):
+                tcp = recv[TCP]
+                if "R" in str(tcp.flags):
+                    if tcp.window > 0:
+                        open_ports.append(sent[TCP].dport)
+                    else:
+                        closed_ports.append(sent[TCP].dport)
+        from utils.service_detector import get_service
+        return {
+            "host": host, "scan_type": "Window",
+            "open": [{"port": p, "service": get_service(p)} for p in sorted(open_ports)],
+            "closed": len(closed_ports),
+        }
+    except PermissionError:
+        return {"error": "Window scan requires Administrator/root privileges"}
+    except ImportError:
+        return {"error": "Scapy not installed"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def ping_sweep(subnet: str = None) -> dict:
+    """ICMP ping sweep for host discovery (-sn/-sP equivalent). Uses Scapy if available."""
+    if subnet is None:
+        subnet = _detect_subnet()
+    try:
+        import ipaddress as _ip
+        network = _ip.ip_network(subnet, strict=False)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    hosts = []
+
+    # Scapy ICMP method (accurate)
+    try:
+        from scapy.all import IP, ICMP, sr, conf
+        conf.verb = 0
+        targets = [str(ip) for ip in list(network.hosts())[:254]]
+        pkts = [IP(dst=t) / ICMP() for t in targets]
+        answered, _ = sr(pkts, timeout=1.5, verbose=False)
+        for sent, recv in answered:
+            hosts.append({
+                "ip": recv[IP].src,
+                "ttl": recv[IP].ttl,
+                "method": "ICMP",
+            })
+        return {"subnet": subnet, "hosts": hosts, "count": len(hosts), "method": "ICMP"}
+    except Exception:
+        pass
+
+    # TCP SYN fallback on port 80/443
+    lock = threading.Lock()
+    import ipaddress as _ip2
+    network2 = _ip2.ip_network(subnet, strict=False)
+
+    def check_host(ip_str):
+        for port in (80, 443, 22):
+            try:
+                sock = socket.create_connection((ip_str, port), timeout=0.5)
+                sock.close()
+                with lock:
+                    hosts.append({"ip": ip_str, "ttl": None, "method": "TCP"})
+                return
+            except Exception:
+                pass
+
+    all_hosts = [str(ip) for ip in list(network2.hosts())[:254]]
+    threads = [threading.Thread(target=check_host, args=(ip,), daemon=True) for ip in all_hosts]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=3)
+
+    return {"subnet": subnet, "hosts": hosts, "count": len(hosts), "method": "TCP-fallback"}
+
+
+# ── IPv6 scanning ─────────────────────────────────────────────────────────────
+
+def ipv6_scan(host: str, ports: str = "1-1024", timing: int = 3,
+              banner: bool = True) -> dict:
+    """TCP connect scan for IPv6 addresses."""
+    port_list = _parse_ports(ports)
+    timeout, max_threads = _TIMING.get(timing, (0.5, 150))
+    open_ports = []
+    closed = 0
+    lock = threading.Lock()
+    sem = threading.Semaphore(max_threads)
+
+    def scan_port(p: int):
+        nonlocal closed
+        try:
+            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((host, p, 0, 0))
+            sock.close()
+            if result == 0:
+                from utils.service_detector import get_service
+                entry = {"port": p, "state": "open", "service": get_service(p)}
+                if banner:
+                    b = banner_grab(host, p, timeout=timeout)
+                    entry["banner"] = b[:200] if b else ""
+                with lock:
+                    open_ports.append(entry)
+            else:
+                with lock:
+                    closed += 1
+        except Exception:
+            pass
+        finally:
+            sem.release()
+
+    threads = []
+    for p in port_list:
+        sem.acquire()
+        t = threading.Thread(target=scan_port, args=(p,), daemon=True)
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    return {
+        "host": host, "protocol": "IPv6",
+        "scanned": len(port_list),
+        "open": sorted(open_ports, key=lambda x: x["port"]),
+        "closed": closed,
+    }
+
+
+# ── NSE script equivalents ────────────────────────────────────────────────────
+
+def nse_run(host: str, scripts: list, open_ports: list = None) -> dict:
+    """
+    Run NSE-like service scripts.
+
+    Available scripts:
+      http-title        — fetch / and extract page title
+      http-headers      — fetch response headers from port 80/443
+      http-server-header — extract Server: header
+      http-robots       — fetch robots.txt
+      ssl-cert          — TLS certificate details (subject, issuer, expiry)
+      ftp-anon          — test anonymous FTP login
+      smtp-commands     — EHLO and list SMTP commands
+      ssh-hostkey       — get SSH host key fingerprint
+      smb-os-discovery  — NetBIOS/SMB OS info
+      vnc-info          — VNC version banner
+      http-auth-finder  — detect HTTP auth methods
+    """
+    results = {}
+    if not open_ports:
+        open_ports = []
+
+    def _http(port, use_ssl):
+        try:
+            import urllib.request as _ur
+            import ssl as _ssl
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            scheme = "https" if use_ssl else "http"
+            req = _ur.Request(f"{scheme}://{host}:{port}/",
+                              headers={"User-Agent": "Mozilla/5.0 (NSE/1.0)"})
+            with _ur.urlopen(req, timeout=5, context=ctx if use_ssl else None) as resp:
+                body = resp.read(16384).decode(errors="replace")
+                hdrs = dict(resp.headers)
+                return body, hdrs, resp.status
+        except Exception:
+            return "", {}, 0
+
+    for script in scripts:
+        script = script.lower().strip()
+        try:
+            if script == "http-title":
+                import re as _re
+                for port in [p for p in (open_ports or [80, 443, 8080, 8443]) if p in (80, 443, 8080, 8443, 8000)]:
+                    use_ssl = port in (443, 8443)
+                    body, hdrs, status = _http(port, use_ssl)
+                    if body:
+                        m = _re.search(r"<title[^>]*>(.*?)</title>", body, _re.IGNORECASE | _re.DOTALL)
+                        title = m.group(1).strip()[:200] if m else "(no title)"
+                        results["http-title"] = {"port": port, "title": title, "status": status}
+                        break
+
+            elif script == "http-headers":
+                for port in [p for p in (open_ports or [80, 443]) if p in (80, 443, 8080, 8443, 8000)]:
+                    use_ssl = port in (443, 8443)
+                    _, hdrs, status = _http(port, use_ssl)
+                    if hdrs:
+                        results["http-headers"] = {"port": port, "headers": hdrs, "status": status}
+                        break
+
+            elif script == "http-server-header":
+                for port in [p for p in (open_ports or [80, 443]) if p in (80, 443, 8080, 8443)]:
+                    _, hdrs, _ = _http(port, port in (443, 8443))
+                    if hdrs:
+                        server = hdrs.get("Server") or hdrs.get("server") or ""
+                        results["http-server-header"] = {"port": port, "server": server}
+                        break
+
+            elif script == "http-robots":
+                for port in [p for p in (open_ports or [80, 443]) if p in (80, 443, 8080)]:
+                    use_ssl = port in (443, 8443)
+                    try:
+                        import urllib.request as _ur2
+                        import ssl as _ssl2
+                        ctx2 = _ssl2.create_default_context()
+                        ctx2.check_hostname = False
+                        ctx2.verify_mode = _ssl2.CERT_NONE
+                        scheme = "https" if use_ssl else "http"
+                        req = _ur2.Request(f"{scheme}://{host}:{port}/robots.txt")
+                        with _ur2.urlopen(req, timeout=5, context=ctx2 if use_ssl else None) as r:
+                            robots = r.read(4096).decode(errors="replace")
+                            results["http-robots"] = {"port": port, "robots_txt": robots}
+                            break
+                    except Exception:
+                        pass
+
+            elif script == "ssl-cert":
+                for port in [p for p in (open_ports or [443, 8443]) if p in (443, 8443, 636, 993, 995, 465)]:
+                    try:
+                        import ssl as _ssl3
+                        ctx3 = _ssl3.create_default_context()
+                        ctx3.check_hostname = False
+                        ctx3.verify_mode = _ssl3.CERT_NONE
+                        with _ssl3.create_connection((host, port), timeout=5) as raw:
+                            with ctx3.wrap_socket(raw, server_hostname=host) as s:
+                                cert = s.getpeercert(binary_form=False)
+                                der = s.getpeercert(binary_form=True)
+                                import hashlib
+                                sha1 = hashlib.sha1(der).hexdigest().upper()
+                                sha256 = hashlib.sha256(der).hexdigest().upper()
+                                results["ssl-cert"] = {
+                                    "port": port,
+                                    "subject": dict(x[0] for x in cert.get("subject", [])),
+                                    "issuer": dict(x[0] for x in cert.get("issuer", [])),
+                                    "notBefore": cert.get("notBefore", ""),
+                                    "notAfter": cert.get("notAfter", ""),
+                                    "sha1": ":".join(sha1[i:i+2] for i in range(0, 40, 2)),
+                                    "sha256": sha256[:20] + "...",
+                                    "san": [v for t, v in cert.get("subjectAltName", [])],
+                                }
+                                break
+                    except Exception as e:
+                        results["ssl-cert"] = {"port": port, "error": str(e)}
+
+            elif script == "ftp-anon":
+                port = next((p for p in (open_ports or [21]) if p == 21), 21)
+                try:
+                    import ftplib
+                    ftp = ftplib.FTP()
+                    ftp.connect(host, port, timeout=8)
+                    banner = ftp.getwelcome()
+                    try:
+                        ftp.login("anonymous", "anon@example.com")
+                        listing = []
+                        ftp.retrlines("LIST", listing.append)
+                        results["ftp-anon"] = {"port": port, "anonymous": True,
+                                               "banner": banner, "listing": listing[:10]}
+                        ftp.quit()
+                    except Exception:
+                        results["ftp-anon"] = {"port": port, "anonymous": False, "banner": banner}
+                except Exception as e:
+                    results["ftp-anon"] = {"error": str(e)}
+
+            elif script == "smtp-commands":
+                port = next((p for p in (open_ports or [25, 587]) if p in (25, 587, 465)), 25)
+                try:
+                    with socket.create_connection((host, port), timeout=8) as s:
+                        s.settimeout(5)
+                        banner = s.recv(1024).decode(errors="replace").strip()
+                        s.sendall(f"EHLO probe.local\r\n".encode())
+                        ehlo_resp = s.recv(4096).decode(errors="replace")
+                        s.sendall(b"QUIT\r\n")
+                    cmds = [line[4:] for line in ehlo_resp.splitlines() if line.startswith("250-") or line.startswith("250 ")]
+                    results["smtp-commands"] = {"port": port, "banner": banner,
+                                                "commands": cmds, "ehlo_response": ehlo_resp[:500]}
+                except Exception as e:
+                    results["smtp-commands"] = {"error": str(e)}
+
+            elif script == "ssh-hostkey":
+                port = next((p for p in (open_ports or [22]) if p == 22), 22)
+                b = banner_grab(host, port, timeout=5)
+                if b:
+                    results["ssh-hostkey"] = {"port": port, "banner": b,
+                                              "version": b.split("\n")[0] if b else ""}
+
+            elif script == "smb-os-discovery":
+                for port in [p for p in (open_ports or [445, 139]) if p in (445, 139)]:
+                    b = banner_grab(host, port, timeout=5)
+                    results["smb-os-discovery"] = {"port": port, "banner": b[:200] if b else ""}
+                    break
+
+            elif script == "vnc-info":
+                port = next((p for p in (open_ports or [5900]) if p == 5900), 5900)
+                b = banner_grab(host, port, timeout=5)
+                if b and "RFB" in b:
+                    results["vnc-info"] = {"port": port, "version": b.split("\n")[0]}
+                elif b:
+                    results["vnc-info"] = {"port": port, "banner": b[:100]}
+
+            elif script == "http-auth-finder":
+                for port in [p for p in (open_ports or [80, 443]) if p in (80, 443, 8080)]:
+                    _, hdrs, status = _http(port, port in (443, 8443))
+                    auth = hdrs.get("WWW-Authenticate") or hdrs.get("www-authenticate") or ""
+                    results["http-auth-finder"] = {"port": port, "status": status, "auth": auth}
+                    break
+
+        except Exception as exc:
+            results[script] = {"error": str(exc)}
+
+    return results
+
+
+# ── Scan output format converters ─────────────────────────────────────────────
+
+def scan_to_xml(scan_result: dict) -> str:
+    """Convert port scan result to Nmap-compatible XML format."""
+    import xml.etree.ElementTree as ET
+    import time as _time
+
+    root = ET.Element("nmaprun")
+    root.set("scanner", "ids-ips-scanner")
+    root.set("start", str(int(_time.time())))
+    root.set("version", "1.0")
+
+    host_el = ET.SubElement(root, "host")
+    addr = ET.SubElement(host_el, "address")
+    addr.set("addr", scan_result.get("host", ""))
+    addr.set("addrtype", "ipv4")
+
+    ports_el = ET.SubElement(host_el, "ports")
+    for p in scan_result.get("open", []):
+        port_el = ET.SubElement(ports_el, "port")
+        port_el.set("protocol", "tcp")
+        port_el.set("portid", str(p.get("port", 0)))
+        state_el = ET.SubElement(port_el, "state")
+        state_el.set("state", "open")
+        svc_el = ET.SubElement(port_el, "service")
+        svc_el.set("name", p.get("service", ""))
+        if p.get("banner"):
+            svc_el.set("banner", p["banner"][:100])
+        if p.get("version"):
+            svc_el.set("version", p["version"])
+
+    if scan_result.get("os"):
+        os_el = ET.SubElement(host_el, "os")
+        osmatch = ET.SubElement(os_el, "osmatch")
+        osmatch.set("name", scan_result["os"].get("guess", "Unknown"))
+        osmatch.set("accuracy", "medium")
+
+    ET.indent(root, space="  ")
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+
+
+def scan_to_grepable(scan_result: dict) -> str:
+    """Convert port scan result to Nmap grepable format (-oG)."""
+    import time as _time
+    host = scan_result.get("host", "unknown")
+    open_ports = scan_result.get("open", [])
+    ports_str = ", ".join(
+        f"{p['port']}/open/tcp//{p.get('service', '')}/"
+        for p in open_ports
+    )
+    ts = _time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        f"# IDS/IPS Scanner grepable output — {ts}",
+        f"Host: {host}\tPorts: {ports_str}\t",
+    ]
+    if scan_result.get("os"):
+        lines.append(f"# OS: {scan_result['os'].get('guess', 'Unknown')}")
+    return "\n".join(lines)
+
+
+def scan_to_normal(scan_result: dict) -> str:
+    """Convert port scan result to Nmap normal format (-oN)."""
+    import time as _time
+    host = scan_result.get("host", "unknown")
+    open_ports = scan_result.get("open", [])
+    lines = [
+        f"IDS/IPS Scanner Report",
+        f"Scan time: {_time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"",
+        f"Nmap scan report for {host}",
+        f"",
+        f"PORT     STATE SERVICE   VERSION",
+    ]
+    for p in open_ports:
+        port_s = f"{p['port']}/tcp"
+        svc = p.get("service", "")[:12]
+        ver = (p.get("version") or p.get("banner") or "")[:40]
+        lines.append(f"{port_s:<9} open  {svc:<10} {ver}")
+
+    lines.append("")
+    lines.append(f"Open: {len(open_ports)}, Closed: {scan_result.get('closed', 0)}, "
+                 f"Scanned: {scan_result.get('scanned', 0)}")
+    if scan_result.get("os"):
+        lines.append(f"OS guess: {scan_result['os'].get('guess', 'Unknown')} "
+                     f"(confidence: {scan_result['os'].get('confidence', 'low')})")
+    return "\n".join(lines)
+
+
 def _parse_ports(ports_str: str) -> list:
     result = set()
     for part in ports_str.replace(" ", "").split(","):

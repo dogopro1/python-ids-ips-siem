@@ -114,6 +114,91 @@ def dissect(pkt) -> dict:
                     result["tls"]["handshake_type"] = hs_types.get(raw[5], f"type-{raw[5]}")
                 result["layers"].append("TLS")
 
+            # ── FTP ──────────────────────────────────────────────────────────────
+            elif tcp.dport == 21 or tcp.sport == 21:
+                try:
+                    import re as _re
+                    text = raw.decode(errors="ignore")
+                    ftp_info = {}
+                    m = _re.match(r"(\d{3})[\s\-](.+)", text)
+                    if m:
+                        ftp_info = {"code": int(m.group(1)), "message": m.group(2)[:100]}
+                    elif text.strip():
+                        parts = text.split(None, 1)
+                        cmd = parts[0].upper()
+                        ftp_info = {"command": cmd, "args": parts[1].strip()[:80] if len(parts) > 1 else ""}
+                    if ftp_info:
+                        result["ftp"] = ftp_info
+                        result["layers"].append("FTP")
+                        result["protocol"] = "FTP"
+                except Exception:
+                    pass
+
+            # ── SMTP ─────────────────────────────────────────────────────────────
+            elif tcp.dport in (25, 465, 587) or tcp.sport in (25, 465, 587):
+                try:
+                    import re as _re
+                    text = raw.decode(errors="ignore")
+                    smtp_info: dict = {}
+                    m = _re.match(r"(\d{3})[\s\-](.+)", text)
+                    if m:
+                        smtp_info = {"code": int(m.group(1)), "message": m.group(2)[:100]}
+                    else:
+                        for cmd in ("EHLO", "HELO", "MAIL FROM:", "RCPT TO:", "DATA", "AUTH", "QUIT"):
+                            if text.upper().startswith(cmd):
+                                smtp_info = {"command": cmd, "args": text[len(cmd):].strip()[:80]}
+                                break
+                    if smtp_info:
+                        result["smtp"] = smtp_info
+                        result["layers"].append("SMTP")
+                        result["protocol"] = "SMTP"
+                except Exception:
+                    pass
+
+            # ── Telnet ───────────────────────────────────────────────────────────
+            elif tcp.dport == 23 or tcp.sport == 23:
+                try:
+                    if raw and raw[0] == 0xFF:
+                        _cmds = {251: "WILL", 252: "WONT", 253: "DO", 254: "DONT"}
+                        opts, i = [], 0
+                        while i < min(len(raw) - 2, 64):
+                            if raw[i] == 0xFF and raw[i+1] in _cmds:
+                                opts.append(f"{_cmds[raw[i+1]]} {raw[i+2]}")
+                                i += 3
+                            else:
+                                break
+                        result["telnet"] = {"negotiation": opts[:8],
+                                            "data": raw.decode(errors="replace")[:80]}
+                    else:
+                        result["telnet"] = {"data": raw.decode(errors="replace")[:80]}
+                    result["layers"].append("Telnet")
+                    result["protocol"] = "Telnet"
+                except Exception:
+                    pass
+
+            # ── MQTT ─────────────────────────────────────────────────────────────
+            elif tcp.dport == 1883 or tcp.sport == 1883:
+                try:
+                    if len(raw) >= 2:
+                        msg_type = (raw[0] >> 4) & 0x0F
+                        _mqtt_types = {1: "CONNECT", 2: "CONNACK", 3: "PUBLISH",
+                                       4: "PUBACK", 8: "SUBSCRIBE", 9: "SUBACK",
+                                       12: "PINGREQ", 13: "PINGRESP", 14: "DISCONNECT"}
+                        mqtt_info: dict = {
+                            "msg_type": msg_type,
+                            "msg_type_name": _mqtt_types.get(msg_type, f"TYPE_{msg_type}"),
+                        }
+                        if msg_type == 3 and len(raw) > 4:
+                            topic_len = (raw[2] << 8) | raw[3]
+                            if 4 + topic_len <= len(raw):
+                                mqtt_info["topic"] = raw[4:4+topic_len].decode(errors="replace")
+                                mqtt_info["payload"] = raw[4+topic_len:4+topic_len+64].decode(errors="replace")
+                        result["mqtt"] = mqtt_info
+                        result["layers"].append("MQTT")
+                        result["protocol"] = "MQTT"
+                except Exception:
+                    pass
+
             # ── HTTP detection ────────────────────────────────────────────────
             elif tcp.dport in (80, 8080, 8000, 8888) or tcp.sport in (80, 8080, 8000, 8888):
                 try:

@@ -136,6 +136,26 @@ class Database:
                 );
                 CREATE INDEX IF NOT EXISTS idx_vuln_url ON vuln_scans(url);
                 CREATE INDEX IF NOT EXISTS idx_vuln_ts  ON vuln_scans(scanned_at);
+
+                -- ── Intruder attack results ───────────────────────────────────
+                CREATE TABLE IF NOT EXISTS intruder_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    method TEXT, url TEXT, attack_type TEXT,
+                    results_data TEXT, requests_count INTEGER,
+                    timestamp REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_intr_ts ON intruder_results(timestamp);
+
+                -- ── Spider/Crawler results ────────────────────────────────────
+                CREATE TABLE IF NOT EXISTS spider_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    base_url TEXT, found_url TEXT, method TEXT,
+                    status_code INTEGER, depth INTEGER,
+                    content_type TEXT, forms_count INTEGER,
+                    title TEXT, timestamp REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_spi_base ON spider_results(base_url);
+                CREATE INDEX IF NOT EXISTS idx_spi_ts   ON spider_results(timestamp);
             """)
             self._conn.commit()
 
@@ -591,6 +611,98 @@ class Database:
             ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["timestamp"]))
             lines.append(f"{r['type']},{r['src_ip']},\"{r['message']}\",{r['severity']},{ts}")
         return "\n".join(lines)
+
+    # ── Intruder results ───────────────────────────────────────────────────────
+
+    def save_intruder_run(self, data: dict):
+        with self._write_lock:
+            try:
+                results = data.get("results", [])
+                self._conn.execute(
+                    """INSERT INTO intruder_results
+                       (method, url, attack_type, results_data, requests_count, timestamp)
+                       VALUES (?,?,?,?,?,?)""",
+                    (data.get("method"), data.get("url"), data.get("attack_type"),
+                     json.dumps(results[:500], default=str),
+                     len(results), data.get("timestamp", time.time())),
+                )
+                self._conn.execute(
+                    "DELETE FROM intruder_results WHERE id <= "
+                    "(SELECT id FROM intruder_results ORDER BY id DESC LIMIT 1 OFFSET 200)"
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_intruder_runs(self, limit: int = 20) -> list:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT id,method,url,attack_type,requests_count,timestamp "
+            "FROM intruder_results ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        ).fetchall()]
+
+    def get_intruder_run_detail(self, run_id: int) -> dict:
+        r = self._conn.execute(
+            "SELECT * FROM intruder_results WHERE id=?", (run_id,)
+        ).fetchone()
+        if r:
+            d = dict(r)
+            try:
+                d["results"] = json.loads(d.pop("results_data", "[]"))
+            except Exception:
+                d["results"] = []
+            return d
+        return {}
+
+    # ── Spider results ─────────────────────────────────────────────────────────
+
+    def save_spider_result(self, result: dict):
+        with self._write_lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO spider_results
+                       (base_url, found_url, method, status_code, depth,
+                        content_type, forms_count, title, timestamp)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (result.get("base_url"), result.get("found_url"),
+                     result.get("method", "GET"), result.get("status_code", 0),
+                     result.get("depth", 0), result.get("content_type", ""),
+                     result.get("forms_count", 0), result.get("title", ""),
+                     time.time()),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    def get_spider_results(self, base_url: str = None, limit: int = 200) -> list:
+        if base_url:
+            return [dict(r) for r in self._conn.execute(
+                "SELECT * FROM spider_results WHERE base_url=? ORDER BY depth,id LIMIT ?",
+                (base_url, limit)
+            ).fetchall()]
+        return [dict(r) for r in self._conn.execute(
+            "SELECT base_url, COUNT(*) as pages, MAX(timestamp) as last_crawl "
+            "FROM spider_results GROUP BY base_url ORDER BY last_crawl DESC LIMIT ?",
+            (limit,)
+        ).fetchall()]
+
+    def clear_spider_results(self, base_url: str):
+        with self._write_lock:
+            try:
+                self._conn.execute("DELETE FROM spider_results WHERE base_url=?", (base_url,))
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+
+    # ── Extended stats ─────────────────────────────────────────────────────────
+
+    def get_stats_extended(self) -> dict:
+        base = self.get_stats_summary()
+        base.update({
+            "intruder_runs": self._conn.execute("SELECT COUNT(*) FROM intruder_results").fetchone()[0],
+            "spider_pages": self._conn.execute("SELECT COUNT(*) FROM spider_results").fetchone()[0],
+        })
+        return base
 
     def close(self):
         self._stop.set()

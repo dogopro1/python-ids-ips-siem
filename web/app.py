@@ -212,7 +212,7 @@ def api_db_stats():
 
 
 @app.route("/api/db/top_ports")
-def api_top_ports():
+def api_db_top_ports():
     try:
         db = _get_db()
         if db is None:
@@ -1127,6 +1127,636 @@ def api_export_packets():
     except Exception as e:
         logger.error("GET /api/export/packets.csv: %s", e)
         return jsonify({"error": "internal error"}), 500
+
+
+# ── Intruder API ───────────────────────────────────────────────────────────────
+
+@app.route("/api/intruder/run", methods=["POST"])
+def api_intruder_run():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        method = str(body.get("method", "GET")).upper()
+        url = str(body.get("url", "")).strip()
+        body_template = str(body.get("body_template", ""))
+        headers = body.get("headers") or {}
+        attack_type = str(body.get("attack_type", "sniper")).lower()
+        payload_sets = body.get("payload_sets") or [[]]
+        max_req = min(int(body.get("max_requests", 200)), 500)
+        concurrency = min(int(body.get("concurrency", 10)), 30)
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from proxy.intruder import run_attack
+        result = run_attack(method, url, body_template, headers,
+                            attack_type, payload_sets, max_req,
+                            concurrency=concurrency)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("POST /api/intruder/run: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/intruder/history")
+def api_intruder_history():
+    try:
+        db = _get_db()
+        if db is None:
+            return jsonify([])
+        return jsonify(db.get_intruder_runs())
+    except Exception as e:
+        logger.error("GET /api/intruder/history: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/intruder/detail/<int:run_id>")
+def api_intruder_detail(run_id: int):
+    try:
+        db = _get_db()
+        if db is None:
+            return jsonify({})
+        return jsonify(db.get_intruder_run_detail(run_id))
+    except Exception as e:
+        logger.error("GET /api/intruder/detail/%d: %s", run_id, e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/intruder/payloads")
+def api_intruder_payloads():
+    try:
+        from proxy.intruder import PAYLOADS
+        key = request.args.get("key")
+        if key:
+            return jsonify(PAYLOADS.get(key, []))
+        return jsonify(PAYLOADS)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Decoder API ────────────────────────────────────────────────────────────────
+
+@app.route("/api/decoder/encode", methods=["POST"])
+def api_decoder_encode():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data = str(body.get("data", ""))
+        method = str(body.get("method", "base64")).lower()
+        from proxy.decoder import encode
+        return jsonify(encode(data, method))
+    except Exception as e:
+        logger.error("POST /api/decoder/encode: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/decoder/decode", methods=["POST"])
+def api_decoder_decode():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data = str(body.get("data", ""))
+        method = str(body.get("method", "base64")).lower()
+        from proxy.decoder import decode
+        return jsonify(decode(data, method))
+    except Exception as e:
+        logger.error("POST /api/decoder/decode: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/decoder/hash", methods=["POST"])
+def api_decoder_hash():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data = str(body.get("data", ""))
+        algorithm = str(body.get("algorithm", "sha256")).lower()
+        from proxy.decoder import hash_data
+        return jsonify(hash_data(data, algorithm))
+    except Exception as e:
+        logger.error("POST /api/decoder/hash: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/decoder/jwt", methods=["POST"])
+def api_decoder_jwt():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        token = str(body.get("token", "")).strip()
+        if not token:
+            return jsonify({"error": "token required"}), 400
+        from proxy.decoder import jwt_decode
+        return jsonify(jwt_decode(token))
+    except Exception as e:
+        logger.error("POST /api/decoder/jwt: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/decoder/detect", methods=["POST"])
+def api_decoder_detect():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data = str(body.get("data", ""))
+        from proxy.decoder import detect_encoding
+        return jsonify({"detected": detect_encoding(data)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Comparer API ───────────────────────────────────────────────────────────────
+
+@app.route("/api/comparer/compare", methods=["POST"])
+def api_comparer_compare():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        left = str(body.get("left", ""))
+        right = str(body.get("right", ""))
+        mode = str(body.get("mode", "words")).lower()
+        from proxy.comparer import compare
+        return jsonify(compare(left, right, mode))
+    except Exception as e:
+        logger.error("POST /api/comparer/compare: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+# ── Spider API ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/spider/crawl", methods=["POST"])
+def api_spider_crawl():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        url = str(body.get("url", "")).strip()
+        max_pages = min(int(body.get("max_pages", 30)), 100)
+        max_depth = min(int(body.get("max_depth", 3)), 5)
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from proxy.spider import crawl
+        result = crawl(url, max_pages=max_pages, max_depth=max_depth)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("POST /api/spider/crawl: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/spider/history")
+def api_spider_history():
+    try:
+        db = _get_db()
+        if db is None:
+            return jsonify([])
+        return jsonify(db.get_spider_results())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/spider/results", methods=["POST"])
+def api_spider_results():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        base_url = str(body.get("base_url", "")).strip()
+        db = _get_db()
+        if db is None:
+            return jsonify([])
+        return jsonify(db.get_spider_results(base_url))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── DPI Extended API ───────────────────────────────────────────────────────────
+
+@app.route("/api/dpi/filter", methods=["POST"])
+def api_dpi_filter():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        expr = str(body.get("expression") or body.get("filter") or "").strip()
+        limit = min(int(body.get("limit", 200)), 2000)
+        db = _get_db()
+        if db is None:
+            return jsonify({"packets": [], "total_inspected": 0})
+        packets = db.get_packets(limit=limit)
+        if not expr:
+            return jsonify({"packets": packets, "total_inspected": len(packets)})
+        from dpi.display_filter import filter_packets
+        matched = filter_packets(packets, expr)
+        return jsonify({"packets": matched, "total_inspected": len(packets)})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error("POST /api/dpi/filter: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/dpi/stats", methods=["POST"])
+def api_dpi_stats():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        stat_type = str(body.get("type", "hierarchy"))
+        limit = min(int(body.get("limit", 500)), 5000)
+        db = _get_db()
+        if db is None:
+            return jsonify({})
+        packets = db.get_packets(limit=limit)
+        from dpi import protocol_stats as ps
+        if stat_type == "hierarchy":
+            return jsonify({"data": ps.protocol_hierarchy(packets), "type": stat_type})
+        if stat_type == "conversations":
+            return jsonify({"data": ps.conversations(packets), "type": stat_type})
+        if stat_type == "endpoints":
+            return jsonify({"data": ps.endpoints(packets), "type": stat_type})
+        if stat_type == "io_graph":
+            interval = float(body.get("interval", 1.0))
+            return jsonify({"data": ps.io_graph(packets, interval), "type": stat_type})
+        if stat_type == "services":
+            return jsonify({"data": ps.service_stats(packets), "type": stat_type})
+        if stat_type == "expert":
+            return jsonify({"data": ps.expert_info(packets), "type": stat_type})
+        return jsonify({"error": f"Unknown stat type: {stat_type}"}), 400
+    except Exception as e:
+        logger.error("POST /api/dpi/stats: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/dpi/udp/streams")
+def api_dpi_udp_streams():
+    try:
+        limit = min(int(request.args.get("limit", 100)), 500)
+        # single-stream lookup
+        src_ip = request.args.get("src_ip")
+        dst_ip = request.args.get("dst_ip")
+        src_port = request.args.get("src_port")
+        dst_port = request.args.get("dst_port")
+        from dpi.tcp_reassembler import UDPTracker
+        tracker = UDPTracker.get()
+        if src_ip and dst_ip and src_port and dst_port:
+            stream = tracker.get_stream(src_ip, dst_ip, int(src_port), int(dst_port))
+            return jsonify({"stream": stream})
+        streams = tracker.get_all_streams(limit)
+        return jsonify({"streams": streams, "count": len(streams)})
+    except Exception as e:
+        logger.error("GET /api/dpi/udp/streams: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+# ── Advanced scan API (new Nmap features) ──────────────────────────────────────
+
+@app.route("/api/tools/syn_scan", methods=["POST"])
+def api_syn_scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        timing = int(body.get("timing", 3))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import syn_scan
+        return jsonify(syn_scan(host, ports, timing))
+    except Exception as e:
+        logger.error("POST /api/tools/syn_scan: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/null_scan", methods=["POST"])
+def api_null_scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import null_scan
+        return jsonify(null_scan(host, ports))
+    except Exception as e:
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/fin_scan", methods=["POST"])
+def api_fin_scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import fin_scan
+        return jsonify(fin_scan(host, ports))
+    except Exception as e:
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/xmas_scan", methods=["POST"])
+def api_xmas_scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import xmas_scan
+        return jsonify(xmas_scan(host, ports))
+    except Exception as e:
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/ack_scan", methods=["POST"])
+def api_ack_scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import ack_scan
+        return jsonify(ack_scan(host, ports))
+    except Exception as e:
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/top_ports", methods=["POST"])
+def api_top_ports():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        n = min(int(body.get("n", 100)), 1000)
+        timing = int(body.get("timing", 3))
+        banner = bool(body.get("banner", True))
+        os_detect = bool(body.get("os_detect", False))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import top_ports_scan
+        return jsonify(top_ports_scan(host, n, timing, banner, os_detect))
+    except Exception as e:
+        logger.error("POST /api/tools/top_ports: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/nse", methods=["POST"])
+def api_nse():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        scripts = body.get("scripts") or ["http-title", "ssl-cert", "ftp-anon", "ssh-hostkey"]
+        open_ports = body.get("open_ports") or []
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import nse_run
+        return jsonify(nse_run(host, scripts, open_ports))
+    except Exception as e:
+        logger.error("POST /api/tools/nse: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/ping_sweep", methods=["POST"])
+def api_ping_sweep():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        subnet = body.get("subnet")
+        from utils.net_tools import ping_sweep
+        return jsonify(ping_sweep(subnet))
+    except Exception as e:
+        logger.error("POST /api/tools/ping_sweep: %s", e)
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/ipv6scan", methods=["POST"])
+def api_ipv6scan():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        host = str(body.get("host", "")).strip()
+        ports = str(body.get("ports", "1-1024"))
+        timing = int(body.get("timing", 3))
+        if not host:
+            return jsonify({"error": "host required"}), 400
+        from utils.net_tools import ipv6_scan
+        return jsonify(ipv6_scan(host, ports, timing))
+    except Exception as e:
+        return jsonify({"error": "internal error"}), 500
+
+
+@app.route("/api/tools/scan_export", methods=["POST"])
+def api_scan_export():
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        fmt = str(body.get("format", "normal")).lower()
+        from utils.net_tools import scan_to_xml, scan_to_grepable, scan_to_normal, top_ports_scan
+        # Accept either pre-built scan_result or run a quick scan from host
+        scan_result = body.get("scan_result") or {}
+        if not scan_result:
+            host = str(body.get("host", "")).strip()
+            if not host:
+                return jsonify({"error": "host required"}), 400
+            scan_result = top_ports_scan(host, n=100, timing=3, banner=False, os_detect=False)
+        if fmt == "xml":
+            return Response(scan_to_xml(scan_result), mimetype="application/xml",
+                            headers={"Content-Disposition": "attachment; filename=scan.xml"})
+        if fmt == "grepable":
+            return Response(scan_to_grepable(scan_result), mimetype="text/plain",
+                            headers={"Content-Disposition": "attachment; filename=scan.gnmap"})
+        return Response(scan_to_normal(scan_result), mimetype="text/plain",
+                        headers={"Content-Disposition": "attachment; filename=scan.txt"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Recon endpoints ────────────────────────────────────────────────────────────
+
+@app.route("/api/recon/subdomains", methods=["POST"])
+def api_recon_subdomains():
+    try:
+        body = request.get_json(silent=True) or {}
+        domain = (body.get("domain") or "").strip()
+        if not domain:
+            return jsonify({"error": "domain required"}), 400
+        from recon.subdomain_enum import run
+        result = run(
+            domain,
+            probe_http=body.get("probe_http", True),
+            bruteforce=body.get("bruteforce", False),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/subdomains: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/dns", methods=["POST"])
+def api_recon_dns():
+    try:
+        body = request.get_json(silent=True) or {}
+        domain = (body.get("domain") or "").strip()
+        if not domain:
+            return jsonify({"error": "domain required"}), 400
+        from recon.dns_tools import lookup
+        result = lookup(domain, record_types=body.get("record_types"))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/dns: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/dns/zone", methods=["POST"])
+def api_recon_dns_zone():
+    try:
+        body = request.get_json(silent=True) or {}
+        domain = (body.get("domain") or "").strip()
+        if not domain:
+            return jsonify({"error": "domain required"}), 400
+        from recon.dns_tools import zone_transfer
+        result = zone_transfer(domain)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/dns/zone: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/wayback", methods=["POST"])
+def api_recon_wayback():
+    try:
+        body = request.get_json(silent=True) or {}
+        domain = (body.get("domain") or "").strip()
+        if not domain:
+            return jsonify({"error": "domain required"}), 400
+        from recon.wayback import fetch
+        result = fetch(
+            domain,
+            limit=body.get("limit", 2000),
+            from_year=body.get("from_year"),
+            to_year=body.get("to_year"),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/wayback: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/favicon", methods=["POST"])
+def api_recon_favicon():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.favicon import fetch
+        result = fetch(url)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/favicon: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/reverse_ip", methods=["POST"])
+def api_recon_reverse_ip():
+    try:
+        body = request.get_json(silent=True) or {}
+        ip = (body.get("ip") or body.get("domain") or "").strip()
+        if not ip:
+            return jsonify({"error": "ip or domain required"}), 400
+        from recon.reverse_ip import lookup
+        result = lookup(ip)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/reverse_ip: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/js_files", methods=["POST"])
+def api_recon_js_files():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.js_analyzer import run
+        result = run(url, max_js=body.get("max_js", 30))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/js_files: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/asn", methods=["POST"])
+def api_recon_asn():
+    try:
+        body = request.get_json(silent=True) or {}
+        query = (body.get("query") or body.get("ip") or body.get("domain") or "").strip()
+        if not query:
+            return jsonify({"error": "ip or domain required"}), 400
+        from recon.asn_lookup import lookup
+        result = lookup(query, include_prefixes=body.get("include_prefixes", False))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/asn: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/emails", methods=["POST"])
+def api_recon_emails():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.email_harvester import run
+        result = run(url, max_pages=body.get("max_pages", 20))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/emails: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/http_probe", methods=["POST"])
+def api_recon_http_probe():
+    try:
+        body = request.get_json(silent=True) or {}
+        targets = body.get("targets") or []
+        if isinstance(targets, str):
+            targets = [t.strip() for t in targets.splitlines() if t.strip()]
+        if not targets:
+            return jsonify({"error": "targets list required"}), 400
+        from recon.http_probe import probe
+        result = probe(targets[:100], concurrency=body.get("concurrency", 20))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/http_probe: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/security_headers", methods=["POST"])
+def api_recon_security_headers():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.security_headers import analyze
+        result = analyze(url)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/security_headers: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/tech", methods=["POST"])
+def api_recon_tech():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.tech_detector import detect
+        result = detect(url)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/tech: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/broken_links", methods=["POST"])
+def api_recon_broken_links():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.broken_links import run
+        result = run(url, max_pages=body.get("max_pages", 20))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/broken_links: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/export/alerts.csv")
