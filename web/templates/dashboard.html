@@ -1287,6 +1287,11 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
         <button class="btn btn-ghost recon-sub" data-rsub="sec_headers" onclick="showReconSub('sec_headers')">Security Headers</button>
         <button class="btn btn-ghost recon-sub" data-rsub="tech" onclick="showReconSub('tech')">Web Tech</button>
         <button class="btn btn-ghost recon-sub" data-rsub="broken_links" onclick="showReconSub('broken_links')">Broken Links</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="whois" onclick="showReconSub('whois')">WHOIS</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="robots" onclick="showReconSub('robots')">Robots/Sitemap</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="crawler" onclick="showReconSub('crawler')">Web Crawler</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="status_codes" onclick="showReconSub('status_codes')">Status Codes</button>
+        <button class="btn btn-ghost recon-sub" data-rsub="resp_headers" onclick="showReconSub('resp_headers')">Response Headers</button>
       </div>
 
       <!-- Subdomain Enumeration -->
@@ -1467,6 +1472,84 @@ body.theme-light .nav-item.active{background:rgba(59,130,246,.1)}
           <div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Status</th><th>External</th><th>Found On</th></tr></thead>
             <tbody id="recon-bl-body"><tr><td colspan="4" class="empty">Enter URL and click Check</td></tr></tbody>
           </table></div>
+        </div>
+      </div>
+      <!-- WHOIS -->
+      <div id="recon-panel-whois" class="recon-panel" style="display:none">
+        <div class="section-title">WHOIS / Domain Info</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-who-domain" placeholder="example.com or IP" style="width:240px">
+            <button class="btn btn-blue" onclick="runWHOIS()">Lookup</button>
+            <span id="recon-who-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-who-result"></div>
+        </div>
+      </div>
+
+      <!-- Robots / Sitemap -->
+      <div id="recon-panel-robots" class="recon-panel" style="display:none">
+        <div class="section-title">Robots.txt &amp; Sitemap</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-rob-url" placeholder="https://example.com" style="width:280px">
+            <button class="btn btn-blue" onclick="runRobots()">Fetch</button>
+            <span id="recon-rob-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-rob-result"></div>
+        </div>
+      </div>
+
+      <!-- Web Crawler -->
+      <div id="recon-panel-crawler" class="recon-panel" style="display:none">
+        <div class="section-title">Web Crawler</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-craw-url" placeholder="https://example.com" style="width:280px">
+            <input type="number" id="recon-craw-pages" placeholder="50" value="50" style="width:70px">
+            <input type="number" id="recon-craw-depth" placeholder="Depth 3" value="3" style="width:80px">
+            <button class="btn btn-blue" onclick="runCrawler()">Crawl</button>
+            <span id="recon-craw-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-craw-summary" class="text-muted" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Status</th><th>Title</th><th>Depth</th><th>Forms</th><th>Size</th></tr></thead>
+            <tbody id="recon-craw-body"><tr><td colspan="6" class="empty">Enter URL and click Crawl</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- Status Codes -->
+      <div id="recon-panel-status_codes" class="recon-panel" style="display:none">
+        <div class="section-title">Status Codes</div>
+        <div class="card">
+          <div class="form-row mb8" style="align-items:flex-start">
+            <div>
+              <input type="text" id="recon-sc-base" placeholder="Base URL (optional): https://example.com" style="width:320px;margin-bottom:6px;display:block">
+              <textarea id="recon-sc-targets" placeholder="One URL or path per line&#10;/admin&#10;/login&#10;https://other.com/" style="width:320px;height:80px;resize:vertical"></textarea>
+            </div>
+            <button class="btn btn-blue" onclick="runStatusCodes()">Check</button>
+            <span id="recon-sc-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-sc-summary" style="margin-bottom:8px"></div>
+          <div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Status</th><th>Label</th><th>Time (ms)</th><th>Size</th><th>Location</th></tr></thead>
+            <tbody id="recon-sc-body"><tr><td colspan="6" class="empty">Enter targets and click Check</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- Response Headers -->
+      <div id="recon-panel-resp_headers" class="recon-panel" style="display:none">
+        <div class="section-title">Response Headers</div>
+        <div class="card">
+          <div class="form-row mb8">
+            <input type="text" id="recon-rh-url" placeholder="https://example.com" style="width:280px">
+            <select id="recon-rh-method" style="padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px">
+              <option>GET</option><option>HEAD</option><option>POST</option><option>OPTIONS</option>
+            </select>
+            <button class="btn btn-blue" onclick="runResponseHeaders()">Fetch</button>
+            <span id="recon-rh-msg" class="text-muted" style="font-size:13px"></span>
+          </div>
+          <div id="recon-rh-result"></div>
         </div>
       </div>
     </div><!-- #tab-recon -->
@@ -3752,6 +3835,165 @@ async function runTechDetect() {
             <div class="text-muted" style="font-size:11px">${esc(k)}</div>
             <div style="font-size:13px">${esc(v)}</div></div>`).join('')}
       </div>`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runWHOIS() {
+  const domain = document.getElementById('recon-who-domain').value.trim();
+  if (!domain) return;
+  const msg = document.getElementById('recon-who-msg');
+  const result = document.getElementById('recon-who-result');
+  msg.textContent = 'Looking up WHOIS…';
+  try {
+    const r = await post('/api/recon/whois', {domain});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `Done in ${r.elapsed_s}s via ${esc(r.source||'')}`;
+    const p = r.parsed || {};
+    const fields = [
+      ['Registrar', p.registrar], ['Created', p.creation_date],
+      ['Expires', p.expiry_date], ['Updated', p.updated_date],
+      ['Registrant', p.registrant], ['Organization', p.registrant_org],
+      ['Country', p.registrant_country], ['Email', p.registrant_email],
+      ['Name Servers', p.name_servers], ['Status', p.status], ['DNSSEC', p.dnssec],
+    ].filter(([,v]) => v);
+    result.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:700px;margin-bottom:12px">
+        ${fields.map(([k,v])=>`<div class="card" style="padding:10px">
+          <div class="text-muted" style="font-size:11px">${esc(k)}</div>
+          <div style="font-size:13px">${esc(Array.isArray(v)?v.join(', '):String(v||''))}</div>
+        </div>`).join('')}
+      </div>
+      ${r.raw ? `<details style="margin-top:8px"><summary class="text-muted" style="cursor:pointer;font-size:12px">Raw WHOIS output</summary>
+        <pre style="font-size:11px;max-height:300px;overflow:auto;background:var(--surface-2);padding:8px;border-radius:4px;margin-top:4px">${esc(r.raw)}</pre>
+      </details>` : ''}`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runRobots() {
+  const url = document.getElementById('recon-rob-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-rob-msg');
+  const result = document.getElementById('recon-rob-result');
+  msg.textContent = 'Fetching robots.txt & sitemap…';
+  try {
+    const r = await post('/api/recon/robots', {url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.sitemap_count} sitemap URLs — ${r.elapsed_s}s`;
+    const rob = r.robots || {};
+    result.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div class="section-title">Disallowed Paths (${(rob.all_disallowed||[]).length})</div>
+          <div class="card" style="padding:8px;max-height:200px;overflow-y:auto">
+            ${(rob.all_disallowed||[]).map(p=>`<div style="font-family:monospace;font-size:12px;padding:2px 0">${esc(p)}</div>`).join('')||'<div class="text-muted">None</div>'}
+          </div>
+          ${rob.interesting_paths&&rob.interesting_paths.length?`
+          <div class="section-title" style="color:var(--red);margin-top:8px">Interesting Paths (${rob.interesting_paths.length})</div>
+          <div class="card" style="padding:8px">
+            ${rob.interesting_paths.map(p=>`<div style="font-family:monospace;font-size:12px;padding:2px 0;color:var(--red)">${esc(p)}</div>`).join('')}
+          </div>`:''}
+        </div>
+        <div>
+          <div class="section-title">Sitemap URLs (${r.sitemap_count})</div>
+          <div class="card" style="padding:8px;max-height:200px;overflow-y:auto">
+            ${(r.sitemap_urls||[]).slice(0,100).map(u=>`<div style="font-size:11px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a></div>`).join('')||'<div class="text-muted">None found</div>'}
+          </div>
+          <div class="section-title" style="margin-top:8px">Sitemap Sources</div>
+          <div class="card" style="padding:8px">
+            ${(r.sitemaps_checked||[]).map(s=>`<div style="font-size:11px;font-family:monospace">${esc(s)}</div>`).join('')||'<div class="text-muted">None</div>'}
+          </div>
+        </div>
+      </div>
+      ${r.robots_raw?`<details style="margin-top:8px"><summary class="text-muted" style="cursor:pointer;font-size:12px">Raw robots.txt</summary>
+        <pre style="font-size:11px;max-height:200px;overflow:auto;background:var(--surface-2);padding:8px;border-radius:4px;margin-top:4px">${esc(r.robots_raw)}</pre>
+      </details>`:''}`;
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runCrawler() {
+  const url = document.getElementById('recon-craw-url').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('recon-craw-msg');
+  const body2 = document.getElementById('recon-craw-body');
+  msg.textContent = 'Crawling…';
+  body2.innerHTML = '<tr><td colspan="6" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/crawl', {
+      url,
+      max_pages: parseInt(document.getElementById('recon-craw-pages').value)||50,
+      max_depth: parseInt(document.getElementById('recon-craw-depth').value)||3,
+    });
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    document.getElementById('recon-craw-summary').textContent =
+      `${r.total_pages} pages | ${r.total_external} external links | ${(r.emails||[]).length} emails — ${r.elapsed_s}s`;
+    msg.textContent = '';
+    body2.innerHTML = (r.pages||[]).map(p=>`<tr>
+      <td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></td>
+      <td><span class="badge ${p.status<300?'badge-green':p.status<400?'badge-blue':'badge-red'}">${p.status}</span></td>
+      <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title||'')}</td>
+      <td>${p.depth}</td>
+      <td>${(p.forms||[]).length}</td>
+      <td style="font-size:11px">${fmtBytes(p.size_bytes||0)}</td>
+    </tr>`).join('')||'<tr><td colspan="6" class="empty">No pages found</td></tr>';
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runStatusCodes() {
+  const raw = document.getElementById('recon-sc-targets').value.trim();
+  if (!raw) return;
+  const targets = raw.split('\n').map(t=>t.trim()).filter(Boolean);
+  const base_url = document.getElementById('recon-sc-base').value.trim()||null;
+  const msg = document.getElementById('recon-sc-msg');
+  const body2 = document.getElementById('recon-sc-body');
+  msg.textContent = `Checking ${targets.length} targets…`;
+  body2.innerHTML = '<tr><td colspan="6" class="empty">Working…</td></tr>';
+  try {
+    const r = await post('/api/recon/status_codes', {targets, base_url});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `${r.total} checked — ${r.elapsed_s}s`;
+    // Summary badges
+    const byCat = r.by_category||{};
+    const sumHtml = Object.entries(byCat).map(([cat,n])=>`<span class="badge ${
+      cat.startsWith('2')?'badge-green':cat.startsWith('3')?'badge-blue':cat.startsWith('4')?'badge-orange':'badge-red'
+    }" style="margin-right:4px">${esc(cat)}: ${n}</span>`).join('');
+    document.getElementById('recon-sc-summary').innerHTML = sumHtml;
+    body2.innerHTML = (r.results||[]).map(res=>`<tr>
+      <td style="font-size:11px;font-family:monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(res.url)}" target="_blank" rel="noopener">${esc(res.url)}</a></td>
+      <td>${res.status?`<span class="badge ${res.status<300?'badge-green':res.status<400?'badge-blue':res.status<500?'badge-orange':'badge-red'}">${res.status}</span>`:'<span style="color:var(--red)">ERR</span>'}</td>
+      <td style="font-size:12px">${esc(res.label||res.error||'')}</td>
+      <td>${res.time_ms||'—'}</td>
+      <td style="font-size:11px">${res.size?fmtBytes(res.size):'—'}</td>
+      <td style="font-size:11px;font-family:monospace">${esc(res.location||'')}</td>
+    </tr>`).join('')||'<tr><td colspan="6" class="empty">No results</td></tr>';
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function runResponseHeaders() {
+  const url = document.getElementById('recon-rh-url').value.trim();
+  if (!url) return;
+  const method = document.getElementById('recon-rh-method').value;
+  const msg = document.getElementById('recon-rh-msg');
+  const result = document.getElementById('recon-rh-result');
+  msg.textContent = 'Fetching headers…';
+  try {
+    const r = await post('/api/recon/response_headers', {url, method});
+    if (r.error) { msg.textContent = 'Error: ' + r.error; return; }
+    msg.textContent = `HTTP ${r.status} — ${r.header_count} headers — ${r.elapsed_ms}ms`;
+    const catColor = {security:'#10b981',disclosure:'#ef4444',interesting:'#f59e0b',custom:'#6366f1',standard:'var(--muted)'};
+    result.innerHTML = `
+      <div class="text-muted" style="font-size:12px;margin-bottom:8px">
+        Final URL: <span style="font-family:monospace">${esc(r.final_url||url)}</span>
+        ${r.redirect_chain&&r.redirect_chain.length?`| Redirects: ${r.redirect_chain.length}`:''}
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>Header</th><th>Value</th><th>Category</th></tr></thead><tbody>
+        ${(r.headers||[]).map(h=>`<tr>
+          <td style="font-family:monospace;font-size:12px;white-space:nowrap"><strong>${esc(h.name)}</strong></td>
+          <td style="font-size:12px;word-break:break-all">${esc(h.value)}</td>
+          <td><span style="font-size:11px;color:${catColor[h.category]||'var(--muted)'}">${esc(h.category)}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
   } catch(e) { msg.textContent = 'Error: ' + e.message; }
 }
 

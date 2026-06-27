@@ -1759,6 +1759,92 @@ def api_recon_broken_links():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/recon/whois", methods=["POST"])
+def api_recon_whois():
+    try:
+        body = request.get_json(silent=True) or {}
+        domain = (body.get("domain") or body.get("query") or "").strip()
+        if not domain:
+            return jsonify({"error": "domain required"}), 400
+        from recon.whois_lookup import lookup
+        result = lookup(domain)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/whois: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/robots", methods=["POST"])
+def api_recon_robots():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.robots_sitemap import fetch
+        result = fetch(url, max_sitemap_urls=body.get("max_sitemap_urls", 500))
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/robots: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/crawl", methods=["POST"])
+def api_recon_crawl():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.web_crawler import crawl
+        result = crawl(
+            url,
+            max_pages=body.get("max_pages", 50),
+            max_depth=body.get("max_depth", 3),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/crawl: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/status_codes", methods=["POST"])
+def api_recon_status_codes():
+    try:
+        body = request.get_json(silent=True) or {}
+        targets = body.get("targets") or []
+        if isinstance(targets, str):
+            targets = [t.strip() for t in targets.splitlines() if t.strip()]
+        base_url = (body.get("base_url") or "").strip() or None
+        if not targets:
+            return jsonify({"error": "targets list required"}), 400
+        from recon.status_codes import check
+        result = check(targets[:500], base_url=base_url)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/status_codes: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recon/response_headers", methods=["POST"])
+def api_recon_response_headers():
+    try:
+        body = request.get_json(silent=True) or {}
+        url = (body.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        from recon.response_headers import fetch
+        result = fetch(
+            url,
+            method=body.get("method", "GET"),
+            follow_redirects=body.get("follow_redirects", True),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("recon/response_headers: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/export/alerts.csv")
 def api_export_alerts():
     try:
